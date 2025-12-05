@@ -1,0 +1,47 @@
+/*
+ * eBPF script to trace file reads and writes.
+ * Traces openat, read, and write syscalls.
+ *
+ * Usage: sudo bpftrace trace.bt
+ * Output format: R|W <pid> <filepath>
+ */
+
+tracepoint:syscalls:sys_enter_openat
+{
+    // Store filename being opened, keyed by pid
+    @filename[pid] = str(args->filename);
+    @flags[pid] = args->flags;
+}
+
+tracepoint:syscalls:sys_exit_openat
+/ @filename[pid] != "" /
+{
+    // Map file descriptor to filename (args->ret is the fd)
+    // Only store if open succeeded (ret >= 0)
+    if (args->ret >= 0) {
+        @files[pid, args->ret] = @filename[pid];
+        @file_flags[pid, args->ret] = @flags[pid];
+    }
+    delete(@filename[pid]);
+    delete(@flags[pid]);
+}
+
+tracepoint:syscalls:sys_enter_read
+/ @files[pid, args->fd] != "" /
+{
+    printf("R %d %s\n", pid, @files[pid, args->fd]);
+}
+
+tracepoint:syscalls:sys_enter_write
+/ @files[pid, args->fd] != "" /
+{
+    printf("W %d %s\n", pid, @files[pid, args->fd]);
+}
+
+// Clean up file descriptor mappings when files are closed
+tracepoint:syscalls:sys_enter_close
+/ @files[pid, args->fd] != "" /
+{
+    delete(@files[pid, args->fd]);
+    delete(@file_flags[pid, args->fd]);
+}

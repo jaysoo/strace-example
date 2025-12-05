@@ -1,0 +1,23 @@
+# Docker Compose for eBPF I/O tracing PoC
+#
+# Usage:
+#   docker compose up -d
+#   docker compose exec ebpf bash
+#   # Inside container:
+#   node tracer.mjs node test-script.mjs
+
+services:
+  ebpf:
+    build: .
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      # Mount the PoC directory
+      - .:/workspace
+      # Required for eBPF (may not all exist on Docker Desktop)
+      - /sys/kernel/debug:/sys/kernel/debug:rw
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null

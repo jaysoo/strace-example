@@ -1,0 +1,2 @@
+hello world from input file
+this is test data for ebpf tracing
