@@ -9,7 +9,7 @@
       "command": "node {projectRoot}/scripts/process.mjs",
       "cache": true,
       "dependsOn": ["data-fetcher:process-data"],
-      "inputs": ["{projectRoot}/data/input.txt"],
+      "inputs": ["{projectRoot}/data/input.txt", "{projectRoot}/scripts/process.mjs"],
       "outputs": ["{projectRoot}/dist/output.txt"]
     }
   }

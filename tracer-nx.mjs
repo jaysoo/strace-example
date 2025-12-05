@@ -301,7 +301,7 @@ async function traceMacOS(command, args) {
   });
 
   // Give fs_usage a moment to start
-  await new Promise(r => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 500));
 
   // Now start the target process
   const targetProcess = spawn(command, args, {
@@ -327,7 +327,7 @@ async function traceMacOS(command, args) {
   });
 
   // Give fs_usage a moment to capture final events
-  await new Promise(r => setTimeout(r, 500));
+  await new Promise(r => setTimeout(r, 1000));
   fsUsageProcess.kill('SIGINT');
 
   await new Promise((resolve) => {
