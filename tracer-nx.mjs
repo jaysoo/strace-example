@@ -288,6 +288,51 @@ function getTaskConfig(project, target) {
 }
 
 /**
+ * Get resolved file inputs using HashPlanInspector
+ * This uses Nx's internal logic to resolve all named inputs, dependencies, etc.
+ */
+function getResolvedInputs(project, target) {
+  try {
+    // Inline script to avoid path issues - runs from workspace with local node_modules
+    const script = `
+const { createProjectGraphAsync } = require('@nx/devkit');
+const { HashPlanInspector } = require('nx/src/hasher/hash-plan-inspector');
+async function main() {
+  const graph = await createProjectGraphAsync();
+  const inspector = new HashPlanInspector(graph);
+  await inspector.init();
+  const plan = inspector.inspectTask({ project: '${project}', target: '${target}' });
+  const files = new Set();
+  for (const inputs of Object.values(plan)) {
+    if (Array.isArray(inputs)) {
+      for (const input of inputs) {
+        if (typeof input === 'string' && input.startsWith('file:')) {
+          files.add(input.replace('file:', ''));
+        }
+      }
+    }
+  }
+  console.log(JSON.stringify([...files]));
+}
+main();
+`;
+    const output = execSync(`node -e "${script.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, {
+      cwd: CONFIG.workspaceRoot,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: process.env,
+      maxBuffer: 50 * 1024 * 1024, // 50MB for large output
+    });
+    const files = JSON.parse(output.trim());
+    return new Set(files);
+  } catch (err) {
+    console.log(`[tracer] Could not get resolved inputs via HashPlanInspector: ${err.message}`);
+    console.log(`[tracer] Falling back to manual named input resolution`);
+    return null; // Fall back to manual resolution
+  }
+}
+
+/**
  * Expand Nx path tokens like {projectRoot}, {workspaceRoot}
  */
 function expandNxPath(pattern, projectRoot) {
@@ -645,6 +690,13 @@ async function main() {
   for (const config of taskConfigs) {
     console.log(`[tracer]   - ${config.project}:${target} (${config.inputs.length} inputs, ${config.outputs.length} outputs)`);
   }
+
+  // Get resolved file inputs using HashPlanInspector (Nx's internal logic)
+  console.log('[tracer] Getting resolved inputs via HashPlanInspector...');
+  const resolvedInputs = getResolvedInputs(project, target);
+  if (resolvedInputs) {
+    console.log(`[tracer] Found ${resolvedInputs.size} resolved file inputs`);
+  }
   console.log('');
 
   // Warm up Nx cache to avoid tracing project graph generation
@@ -686,11 +738,24 @@ async function main() {
     return false;
   };
 
+  // Helper to check if file is in resolved inputs (from HashPlanInspector)
+  const isInResolvedInputs = (filePath) => {
+    if (!resolvedInputs) return false;
+    return resolvedInputs.has(filePath);
+  };
+
   // Compare against declared inputs/outputs across ALL tasks
   // Filter out directories and files outside the project
-  const undeclaredReads = taskReads.filter(
-    f => !isDirectory(f) && isRelevantToProject(f) && !findMatchingInputTask(f, taskConfigs)
-  );
+  // Use HashPlanInspector resolved inputs if available, fall back to pattern matching
+  const undeclaredReads = taskReads.filter(f => {
+    if (isDirectory(f)) return false;
+    if (!isRelevantToProject(f)) return false;
+    // Check HashPlanInspector resolved inputs first
+    if (isInResolvedInputs(f)) return false;
+    // Fall back to pattern matching
+    if (findMatchingInputTask(f, taskConfigs)) return false;
+    return true;
+  });
   const undeclaredWrites = taskWrites.filter(
     f => !isDirectory(f) && isRelevantToProject(f) && !findMatchingOutputTask(f, taskConfigs)
   );
@@ -711,8 +776,10 @@ async function main() {
     console.log('  (none detected in project scope)');
   } else {
     relevantReads.forEach(f => {
-      const matchingTask = findMatchingInputTask(f, taskConfigs);
-      if (matchingTask) {
+      // Check resolved inputs first, then pattern matching
+      if (isInResolvedInputs(f)) {
+        console.log(`  ✓ ${f}`);
+      } else if (findMatchingInputTask(f, taskConfigs)) {
         console.log(`  ✓ ${f}`);
       } else {
         console.log(`  ✗ ${f}`);
