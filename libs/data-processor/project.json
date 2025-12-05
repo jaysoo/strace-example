@@ -1,0 +1,32 @@
+{
+  "name": "data-processor",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/data-processor/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/data-processor",
+        "main": "libs/data-processor/src/index.ts",
+        "tsConfig": "libs/data-processor/tsconfig.lib.json",
+        "assets": ["libs/data-processor/*.md"]
+      }
+    },
+    "process-data": {
+      "executor": "nx:run-commands",
+      "inputs": [
+        "{projectRoot}/data/input.txt"
+      ],
+      "outputs": [
+        "{projectRoot}/data/output.txt"
+      ],
+      "options": {
+        "command": "node {projectRoot}/scripts/process.mjs",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}
