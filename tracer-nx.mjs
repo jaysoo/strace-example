@@ -18,8 +18,6 @@ import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, writeFileSync, unlinkSync, statSync, createWriteStream } from 'fs';
 import { platform } from 'os';
 
-process.env.NX_DAEMON ='false';
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Detect workspace root: use cwd (not script location) for cross-directory invocation
@@ -108,7 +106,7 @@ function warmUpNxCache() {
       cwd: CONFIG.workspaceRoot,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NX_DAEMON: 'false' },
+      env: process.env,
     });
   } catch (err) {
     // Ignore errors - cache warmup is best-effort
@@ -140,7 +138,7 @@ function getNxProjectConfig(project, target) {
       cwd: CONFIG.workspaceRoot,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NX_DAEMON: 'false' },
+      env: process.env,
     });
     const config = JSON.parse(output);
     const targetConfig = config.targets?.[target];
@@ -170,7 +168,7 @@ function getTaskGraph(project, target) {
       cwd: CONFIG.workspaceRoot,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, NX_DAEMON: 'false' },
+      env: process.env,
     });
     const graph = JSON.parse(output);
 
@@ -318,7 +316,7 @@ async function traceMacOS(command, args) {
     cwd: CONFIG.workspaceRoot,
     stdio: ['inherit', 'pipe', 'pipe'],
     detached: false,
-    env: { ...process.env, NX_DAEMON: 'false' },
+    env: process.env,
   });
 
   const pid = targetProcess.pid;
@@ -412,7 +410,7 @@ async function traceLinux(command, args) {
   ], {
     cwd: CONFIG.workspaceRoot,
     stdio: 'inherit',
-    env: { ...process.env, NX_DAEMON: 'false' },
+    env: process.env,
   });
 
   console.log(`[tracer] Starting strace with PID: ${straceProcess.pid}`);

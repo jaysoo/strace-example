@@ -32,8 +32,6 @@ services:
       # Ensure npm/pnpm don't use host caches
       - npm_config_cache=/tmp/.npm
       - PNPM_HOME=/tmp/.pnpm
-      # Disable Nx daemon in container
-      - NX_DAEMON=false
     working_dir: /workspace
     stdin_open: true
     tty: true
