@@ -1,32 +1,4 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
-  "plugins": [
-    {
-      "plugin": "@nx/js/typescript",
-      "options": {
-        "typecheck": { "targetName": "typecheck" },
-        "build": {
-          "targetName": "build",
-          "configName": "tsconfig.lib.json",
-          "buildDepsName": "build-deps",
-          "watchDepsName": "watch-deps"
-        }
-      },
-      "exclude": ["libs/data-fetcher/*"]
-    },
-    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
-    { "plugin": "@nx/jest/plugin", "options": { "targetName": "test" } },
-    {
-      "plugin": "@nx/js/typescript",
-      "include": ["libs/data-fetcher/*"],
-      "options": { "typecheck": { "targetName": "typecheck" } }
-    }
-  ],
-  "targetDefaults": {
-    "@nx/js:swc": {
-      "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["default", "^default"]
-    }
-  }
+  "plugins": []
 }

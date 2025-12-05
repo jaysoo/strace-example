@@ -5,29 +5,11 @@
   "projectType": "library",
   "tags": [],
   "targets": {
-    "build": {
-      "executor": "@nx/js:swc",
-      "outputs": ["{options.outputPath}"],
-      "options": {
-        "outputPath": "dist/libs/data-processor",
-        "main": "libs/data-processor/src/index.ts",
-        "tsConfig": "libs/data-processor/tsconfig.lib.json",
-        "assets": ["libs/data-processor/*.md"]
-      }
-    },
     "process-data": {
-      "executor": "nx:run-commands",
+      "command": "node {projectRoot}/scripts/process.mjs",
       "dependsOn": ["data-fetcher:process-data"],
-      "inputs": [
-        "{projectRoot}/data/input.txt"
-      ],
-      "outputs": [
-        "{projectRoot}/data/output.txt"
-      ],
-      "options": {
-        "command": "node {projectRoot}/scripts/process.mjs",
-        "cwd": "{workspaceRoot}"
-      }
+      "inputs": ["{projectRoot}/data/input.txt"],
+      "outputs": ["{projectRoot}/data/output.txt"]
     }
   }
 }

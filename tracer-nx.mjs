@@ -18,6 +18,8 @@ import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { platform } from 'os';
 
+process.env.NX_DAEMON ='false';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Configuration
