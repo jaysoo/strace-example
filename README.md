@@ -40,7 +40,7 @@ Two test libraries with intentional I/O mismatches. `data-processor:process-data
 |------|-----------|------|
 | `data/source.txt` | ✓ Yes | Input |
 | `secret-config.txt` | ✗ No | Input |
-| `data/fetched.txt` | ✓ Yes | Output |
+| `dist/fetched.txt` | ✓ Yes | Output |
 | `dist/cache.txt` | ✗ No | Output |
 
 ### data-processor (main task)
@@ -49,7 +49,7 @@ Two test libraries with intentional I/O mismatches. `data-processor:process-data
 |------|-----------|------|
 | `data/input.txt` | ✓ Yes | Input |
 | `undeclared-input.txt` | ✗ No | Input |
-| `data/output.txt` | ✓ Yes | Output |
+| `dist/output.txt` | ✓ Yes | Output |
 | `dist/undeclared-output.txt` | ✗ No | Output |
 
 ## Example Output
@@ -66,9 +66,9 @@ FILES READ:
   ✗ libs/data-processor/undeclared-input.txt
 
 FILES WRITTEN:
-  ✓ libs/data-fetcher/data/fetched.txt (data-fetcher)
+  ✓ libs/data-fetcher/dist/fetched.txt (data-fetcher)
   ✗ libs/data-fetcher/dist/cache.txt
-  ✓ libs/data-processor/data/output.txt (data-processor)
+  ✓ libs/data-processor/dist/output.txt (data-processor)
   ✗ libs/data-processor/dist/undeclared-output.txt
 
 ⚠️  UNDECLARED I/O DETECTED

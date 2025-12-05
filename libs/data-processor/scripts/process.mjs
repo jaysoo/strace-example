@@ -4,12 +4,12 @@
  *
  * DECLARED in project.json:
  *   inputs:  {projectRoot}/data/input.txt
- *   outputs: {projectRoot}/data/output.txt
+ *   outputs: {projectRoot}/dist/output.txt
  *
  * ACTUAL I/O (intentional mismatches):
  *   reads:   data/input.txt              ✓ declared
  *            undeclared-input.txt        ✗ UNDECLARED
- *   writes:  data/output.txt             ✓ declared
+ *   writes:  dist/output.txt             ✓ declared
  *            dist/undeclared-output.txt  ✗ UNDECLARED
  */
 
@@ -36,8 +36,8 @@ const secret = readFileSync(undeclaredInputPath, 'utf-8');
 const output = `${input.trim()} | secret: ${secret.trim()} | processed: ${new Date().toISOString()}`;
 
 // Write declared output
-const outputPath = join(projectRoot, 'data', 'output.txt');
-console.log(`[declared]   Writing: data/output.txt`);
+const outputPath = join(projectRoot, 'dist', 'output.txt');
+console.log(`[declared]   Writing: dist/output.txt`);
 writeFileSync(outputPath, output);
 
 // Write UNDECLARED output

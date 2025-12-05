@@ -26,7 +26,7 @@ console.log('[data-fetcher] Read UNDECLARED input: secret-config.txt');
 
 // Write declared output
 const fetchedContent = `FETCHED: ${sourceData.trim()}\nTimestamp: ${new Date().toISOString()}`;
-writeFileSync(join(projectRoot, 'data/fetched.txt'), fetchedContent);
+writeFileSync(join(projectRoot, 'dist/fetched.txt'), fetchedContent);
 console.log('[data-fetcher] Wrote declared output: data/fetched.txt');
 
 // Write UNDECLARED output (cache file)
