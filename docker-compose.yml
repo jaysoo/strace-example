@@ -4,7 +4,7 @@
 #   docker compose up -d
 #   docker compose exec ebpf bash
 #   # Inside container:
-#   node tracer.mjs node test-script.mjs
+#   pnpm install && node tracer-nx.mjs data-processor:process-data
 
 services:
   ebpf:
@@ -15,9 +15,14 @@ services:
     volumes:
       # Mount the PoC directory
       - .:/workspace
+      # Use separate node_modules for container (don't share with host)
+      - ebpf_node_modules:/workspace/node_modules
       # Required for eBPF (may not all exist on Docker Desktop)
       - /sys/kernel/debug:/sys/kernel/debug:rw
     working_dir: /workspace
     stdin_open: true
     tty: true
     command: tail -f /dev/null
+
+volumes:
+  ebpf_node_modules:
