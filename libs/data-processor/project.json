@@ -7,6 +7,7 @@
   "targets": {
     "process-data": {
       "command": "node {projectRoot}/scripts/process.mjs",
+      "cache": true,
       "dependsOn": ["data-fetcher:process-data"],
       "inputs": ["{projectRoot}/data/input.txt"],
       "outputs": ["{projectRoot}/dist/output.txt"]

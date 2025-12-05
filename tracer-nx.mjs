@@ -41,23 +41,9 @@ const CONFIG = {
   ],
   // Patterns for Nx infrastructure reads (project configs, etc.)
   nxInfraPatterns: [
-    /^libs$/,
-    /^apps$/,
-    /^packages$/,
-    /^output$/,
     /\/project\.json$/,
     /\/package\.json$/,
-    /\/tsconfig\.json$/,
-    /\/tsconfig\.lib\.json$/,
-    /\/tsconfig\.spec\.json$/,
-    /\/jest\.config\.ts$/,
-    /\/\.eslintrc/,
-    /\/eslint\.config\./,
     /^\.nx/,
-    /\/src$/,
-    /\/src\/lib$/,
-    /\/dist$/,
-    /\/scripts\/.*\.mjs$/,  // Task scripts are code, not inputs
   ],
   straceOutputFile: '/tmp/nx-tracer-strace.txt',
 };
