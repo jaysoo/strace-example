@@ -1,24 +1,35 @@
-# eBPF I/O Tracing PoC
+# I/O Tracing PoC
 
-Proof of concept for tracing file reads/writes during process execution using strace (portable) or bpftrace (Linux native).
+Proof of concept for tracing file reads/writes during process execution.
 
-## Prerequisites
+## Platform Support
 
-- Docker Desktop (macOS/Windows) or Linux with Docker
+| Platform | Tool | Requires |
+|----------|------|----------|
+| **macOS** | `fs_usage` | `sudo` |
+| **Linux** | `strace` | None (or Docker) |
+| **Linux (native)** | `bpftrace` | Kernel headers, `CAP_BPF` |
+| **Windows** | TBD | - |
 
-## Quick Start (Recommended)
+## Quick Start
 
-Use docker-compose with the **strace-based tracer** (works on Docker Desktop):
+### macOS (Native)
 
 ```bash
-# Build and start container
+# Uses fs_usage to trace file I/O (requires sudo)
+sudo node tracer-fsusage.mjs node test-script.mjs
+```
+
+### Linux (Native or Docker)
+
+```bash
+# Option 1: Native Linux with strace
+node tracer-strace.mjs node test-script.mjs
+
+# Option 2: Docker (works on macOS/Windows too)
 docker compose build
 docker compose up -d
-
-# Run the strace-based tracer (recommended - works on Docker Desktop)
 docker compose exec ebpf node tracer-strace.mjs node test-script.mjs
-
-# Cleanup when done
 docker compose down
 ```
 
@@ -26,18 +37,17 @@ docker compose down
 
 ```
 ============================================================
-I/O Tracer (strace-based) - File Access Monitor
+I/O Tracer - File Access Monitor
 ============================================================
-Workspace: /workspace
+Workspace: /path/to/io-tracing
 Command: node test-script.mjs
 
-[tracer] Starting strace with PID: 12345
+[tracer] Target process PID: 12345
 
-PID: 12346
-Reading from: /workspace/input.txt
-Writing to: /workspace/output/output.txt
-Read content: "hello world from input file
-this is test data for ebpf tracing"
+PID: 12345
+Reading from: /path/to/io-tracing/input.txt
+Writing to: /path/to/io-tracing/output/output.txt
+Read content: "hello world from input file"
 Wrote transformed content to output
 Done!
 
@@ -49,95 +59,84 @@ TRACING RESULTS
 
 FILES READ:
   - input.txt
+  - input2.txt
   - test-script.mjs
 
 FILES WRITTEN:
   - output/output.txt
+  - output/output2.txt
 
 JSON OUTPUT:
 {
-  "reads": [
-    "input.txt",
-    "test-script.mjs"
-  ],
-  "writes": [
-    "output/output.txt"
-  ]
+  "reads": ["input.txt", "input2.txt", "test-script.mjs"],
+  "writes": ["output/output.txt", "output/output2.txt"]
 }
-```
-
-## Alternative: bpftrace (Linux Native Only)
-
-The bpftrace-based tracer requires kernel headers and only works on Linux (not Docker Desktop):
-
-```bash
-# On Linux with bpftrace installed
-sudo node tracer.mjs node test-script.mjs
 ```
 
 ## Files
 
-| File | Description |
-|------|-------------|
-| `tracer-strace.mjs` | **Recommended** - strace-based tracer (works on Docker Desktop) |
-| `tracer.mjs` | bpftrace-based tracer (Linux native only) |
-| `trace.bt` | bpftrace script for syscall tracing |
-| `test-script.mjs` | Test script that reads `input.txt` and writes `output/output.txt` |
-| `input.txt` | Test input file |
-| `Dockerfile` | Ubuntu 22.04 with bpftrace, strace, and Node.js |
-| `docker-compose.yml` | Privileged container setup |
+| File | Platform | Description |
+|------|----------|-------------|
+| `tracer-fsusage.mjs` | macOS | Uses `fs_usage` to trace file opens |
+| `tracer-strace.mjs` | Linux | Uses `strace` to trace syscalls |
+| `tracer.mjs` | Linux | Uses `bpftrace` (requires kernel headers) |
+| `tracer-dtruss.mjs` | macOS | Uses `dtruss` (may have SIP issues) |
+| `test-script.mjs` | Any | Test script that reads/writes files |
+| `input.txt`, `input2.txt` | Any | Test input files |
 
 ## How It Works
 
-### strace-based (tracer-strace.mjs)
+### macOS: fs_usage (tracer-fsusage.mjs)
+
+1. Spawns target process and captures its PID
+2. Runs `fs_usage -w -f filesys <pid>` to monitor filesystem events
+3. Parses `open` syscalls with flag patterns:
+   - `(R___________)` → read
+   - `(_WC_T______X)` → write (create/truncate)
+4. Filters to workspace directory only
+
+### Linux: strace (tracer-strace.mjs)
 
 1. Spawns `strace -f -e trace=openat` to trace file open syscalls
 2. Runs the target command and captures all `openat()` calls
-3. Analyzes flags to determine if file was opened for read or write:
+3. Analyzes flags to determine read vs write:
    - `O_RDONLY` → read
    - `O_WRONLY`, `O_CREAT`, `O_TRUNC` → write
-4. Filters results to workspace directory, ignoring `node_modules`, `.nx`, `.git`
+4. Filters to workspace directory, ignoring `node_modules`, `.nx`, `.git`
 
-### bpftrace-based (tracer.mjs)
+### Linux: bpftrace (tracer.mjs)
 
 1. Attaches to kernel tracepoints via eBPF:
    - `sys_enter_openat` / `sys_exit_openat` - Maps fd → filename
    - `sys_enter_read` / `sys_enter_write` - Tracks actual I/O
-2. Polls for child processes every 100ms (`pgrep -P`)
+2. Polls for child processes every 100ms
 3. Filters output to workspace directory
 
 ## Troubleshooting
 
-### Container files not mounted
-If `/workspace` is empty, restart the container from the correct directory:
+### macOS: "fs_usage requires root privileges"
+```bash
+sudo node tracer-fsusage.mjs node test-script.mjs
+```
+
+### macOS: dtruss doesn't work (SIP)
+Use `tracer-fsusage.mjs` instead. dtruss may be blocked by System Integrity Protection.
+
+### Linux/Docker: Container files not mounted
 ```bash
 docker compose down
 docker compose up -d
 ```
 
-### "strace: ENOENT" or command not found
-Rebuild the container to install strace:
+### Linux/Docker: "strace: ENOENT"
 ```bash
 docker compose build --no-cache
 docker compose up -d
 ```
 
-### Docker socket errors on macOS
-Docker Desktop uses a different socket path. Use docker-compose (Option 1) instead of `docker run`.
-
-## Implementation Decision
-
-| Environment | Tool | Notes |
-|-------------|------|-------|
-| Docker Desktop (macOS/Windows) | `strace` | Works reliably, slightly higher overhead |
-| Linux (Nx Agents) | `bpftrace` | Lower overhead, requires CAP_BPF |
-| macOS native | Not supported | Must use Docker |
-
 ## Next Steps
 
-Once this PoC works, the pattern can be integrated into:
-1. Nx CLI task runner (capture I/O during `nx build`)
+Integration into Nx CLI:
+1. Capture I/O during `nx build` task execution
 2. Compare against declared inputs/outputs in task configuration
 3. Report mismatches to Nx Cloud
-
-See the task plan at `~/.ai/2025-12-05/tasks/hackday-io-tracing-plan.md` for full implementation details.
