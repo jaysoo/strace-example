@@ -12,8 +12,8 @@ sudo node tracer-nx.mjs data-processor:process-data
 node tracer-nx.mjs data-processor:process-data
 
 # Linux (via Docker, from macOS/Windows)
-docker compose build && docker compose up -d
-docker compose exec ebpf bash -c "pnpm install && rm -rf .nx && node tracer-nx.mjs data-processor:process-data"
+docker compose up -d --build
+docker compose exec ebpf node tracer-nx.mjs data-processor:process-data
 ```
 
 ## How It Works

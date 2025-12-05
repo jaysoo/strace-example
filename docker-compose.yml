@@ -19,17 +19,22 @@ services:
       - ebpf_node_modules:/workspace/node_modules
       # Isolate pnpm store from host
       - ebpf_pnpm_store:/workspace/.pnpm-store
+      # Isolate .nx cache from host
+      - ebpf_nx_cache:/workspace/.nx
       # Required for eBPF (may not all exist on Docker Desktop)
       - /sys/kernel/debug:/sys/kernel/debug:rw
     environment:
       # Ensure npm/pnpm don't use host caches
       - npm_config_cache=/tmp/.npm
       - PNPM_HOME=/tmp/.pnpm
+      # Disable Nx daemon in container
+      - NX_DAEMON=false
     working_dir: /workspace
     stdin_open: true
     tty: true
-    command: tail -f /dev/null
+    command: sh -c "pnpm install --frozen-lockfile 2>/dev/null || pnpm install && tail -f /dev/null"
 
 volumes:
   ebpf_node_modules:
   ebpf_pnpm_store:
+  ebpf_nx_cache:
