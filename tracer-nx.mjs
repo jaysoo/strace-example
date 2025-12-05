@@ -15,7 +15,7 @@
 import { spawn, execSync } from 'child_process';
 import { dirname, relative, resolve, join } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import { platform } from 'os';
 
 process.env.NX_DAEMON ='false';
@@ -414,6 +414,20 @@ function isRelevantPath(filePath) {
   return true;
 }
 
+/**
+ * Check if a path is a directory (not a file)
+ */
+function isDirectory(filePath) {
+  const absolutePath = filePath.startsWith('/')
+    ? filePath
+    : join(CONFIG.workspaceRoot, filePath);
+  try {
+    return statSync(absolutePath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -500,11 +514,12 @@ async function main() {
   const taskWrites = results.writes.filter(f => !isNxInfrastructure(f));
 
   // Compare against declared inputs/outputs across ALL tasks
+  // Filter out directories - we only care about files
   const undeclaredReads = taskReads.filter(
-    f => !findMatchingInputTask(f, taskConfigs)
+    f => !isDirectory(f) && !findMatchingInputTask(f, taskConfigs)
   );
   const undeclaredWrites = taskWrites.filter(
-    f => !findMatchingOutputTask(f, taskConfigs)
+    f => !isDirectory(f) && !findMatchingOutputTask(f, taskConfigs)
   );
 
   // Print results
