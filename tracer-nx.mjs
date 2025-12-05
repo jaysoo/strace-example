@@ -183,31 +183,11 @@ function getTaskGraph(project, target) {
 }
 
 /**
- * Get configs for all tasks in the dependency chain
+ * Get config for the specified task only (not dependencies)
+ * Since we use --excludeTaskDependencies, we only need to check the main task
  */
-function getAllTaskConfigs(project, target) {
-  const configs = [];
-
-  // Get the main task config
-  const mainConfig = getNxProjectConfig(project, target);
-  configs.push(mainConfig);
-
-  // Check for dependsOn in the target
-  const dependsOn = mainConfig.target.dependsOn || [];
-  for (const dep of dependsOn) {
-    // Handle "project:target" format
-    if (typeof dep === 'string' && dep.includes(':')) {
-      const [depProject, depTarget] = dep.split(':');
-      try {
-        const depConfig = getNxProjectConfig(depProject, depTarget);
-        configs.push(depConfig);
-      } catch (err) {
-        console.log(`[tracer] Warning: Could not get config for ${dep}`);
-      }
-    }
-  }
-
-  return configs;
+function getTaskConfig(project, target) {
+  return [getNxProjectConfig(project, target)];
 }
 
 /**
@@ -512,7 +492,7 @@ async function main() {
 
   // Get Nx project configurations for all tasks in the dependency chain
   console.log('[tracer] Fetching Nx project configurations...');
-  const taskConfigs = getAllTaskConfigs(project, target);
+  const taskConfigs = getTaskConfig(project, target);
   console.log(`[tracer] Found ${taskConfigs.length} task(s) to trace:`);
   for (const config of taskConfigs) {
     console.log(`[tracer]   - ${config.project}:${target} (${config.inputs.length} inputs, ${config.outputs.length} outputs)`);
@@ -523,8 +503,9 @@ async function main() {
   warmUpNxCache();
 
   // Run the Nx command with tracing
+  // Use --excludeTaskDependencies to only trace the specified task, not its dependencies
   const command = 'npx';
-  const commandArgs = ['nx', 'run', `${project}:${target}`, ...extraArgs];
+  const commandArgs = ['nx', 'run', `${project}:${target}`, '--excludeTaskDependencies', ...extraArgs];
 
   let results;
   if (currentPlatform === 'macos') {
