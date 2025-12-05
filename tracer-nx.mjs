@@ -24,8 +24,75 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG = {
   workspaceRoot: resolve(__dirname),
   ignoredDirs: ['node_modules', '.nx', '.git', '.angular', '.pnpm-store', 'proc', 'dev', 'sys', 'private', 'var', 'tmp'],
+  // Files that Nx reads during task execution (infrastructure, not task-specific)
+  nxInfraFiles: [
+    'nx.json',
+    'package.json',
+    'pnpm-lock.yaml',
+    'package-lock.json',
+    'yarn.lock',
+    'tsconfig.base.json',
+    'tsconfig.json',
+    '.gitignore',
+    '.nxignore',
+    '.claude',
+  ],
+  // Patterns for Nx infrastructure reads (project configs, etc.)
+  nxInfraPatterns: [
+    /^libs$/,
+    /^apps$/,
+    /^packages$/,
+    /^output$/,
+    /\/project\.json$/,
+    /\/package\.json$/,
+    /\/tsconfig\.json$/,
+    /\/tsconfig\.lib\.json$/,
+    /\/tsconfig\.spec\.json$/,
+    /\/jest\.config\.ts$/,
+    /\/\.eslintrc/,
+    /\/eslint\.config\./,
+    /^\.nx/,
+    /\/src$/,
+    /\/src\/lib$/,
+    /\/dist$/,
+    /\/scripts\/.*\.mjs$/,  // Task scripts are code, not inputs
+  ],
   straceOutputFile: '/tmp/nx-tracer-strace.txt',
 };
+
+/**
+ * Check if a path is Nx infrastructure (not task-specific I/O)
+ */
+function isNxInfrastructure(filePath) {
+  // Check exact matches
+  if (CONFIG.nxInfraFiles.includes(filePath)) {
+    return true;
+  }
+  // Check patterns
+  for (const pattern of CONFIG.nxInfraPatterns) {
+    if (pattern.test(filePath)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Warm up Nx caches to avoid tracing project graph generation
+ */
+function warmUpNxCache() {
+  console.log('[tracer] Warming up Nx cache...');
+  try {
+    execSync('npx nx report', {
+      cwd: CONFIG.workspaceRoot,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, NX_DAEMON: 'false' },
+    });
+  } catch (err) {
+    // Ignore errors - cache warmup is best-effort
+  }
+}
 
 // ============================================================================
 // Platform Detection
@@ -423,6 +490,9 @@ async function main() {
   }
   console.log('');
 
+  // Warm up Nx cache to avoid tracing project graph generation
+  warmUpNxCache();
+
   // Run the Nx command with tracing
   const command = 'npx';
   const commandArgs = ['nx', 'run', `${project}:${target}`, ...extraArgs];
@@ -437,11 +507,15 @@ async function main() {
   console.log('');
   console.log(`[tracer] Process exited with code ${results.exitCode}`);
 
+  // Filter out Nx infrastructure files (project.json, tsconfig.json, etc.)
+  const taskReads = results.reads.filter(f => !isNxInfrastructure(f));
+  const taskWrites = results.writes.filter(f => !isNxInfrastructure(f));
+
   // Compare against declared inputs/outputs across ALL tasks
-  const undeclaredReads = results.reads.filter(
+  const undeclaredReads = taskReads.filter(
     f => !findMatchingInputTask(f, taskConfigs)
   );
-  const undeclaredWrites = results.writes.filter(
+  const undeclaredWrites = taskWrites.filter(
     f => !findMatchingOutputTask(f, taskConfigs)
   );
 
@@ -453,10 +527,10 @@ async function main() {
 
   console.log('');
   console.log('FILES READ:');
-  if (results.reads.length === 0) {
+  if (taskReads.length === 0) {
     console.log('  (none detected in workspace)');
   } else {
-    results.reads.forEach(f => {
+    taskReads.forEach(f => {
       const matchingTask = findMatchingInputTask(f, taskConfigs);
       if (matchingTask) {
         console.log(`  ✓ ${f} (${matchingTask})`);
@@ -468,10 +542,10 @@ async function main() {
 
   console.log('');
   console.log('FILES WRITTEN:');
-  if (results.writes.length === 0) {
+  if (taskWrites.length === 0) {
     console.log('  (none detected in workspace)');
   } else {
-    results.writes.forEach(f => {
+    taskWrites.forEach(f => {
       const matchingTask = findMatchingOutputTask(f, taskConfigs);
       if (matchingTask) {
         console.log(`  ✓ ${f} (${matchingTask})`);
@@ -509,8 +583,8 @@ async function main() {
   console.log('JSON OUTPUT:');
   console.log(JSON.stringify({
     tasks: taskConfigs.map(c => `${c.project}:${target}`),
-    reads: results.reads,
-    writes: results.writes,
+    reads: taskReads,
+    writes: taskWrites,
     undeclaredReads,
     undeclaredWrites,
     exitCode: results.exitCode,
