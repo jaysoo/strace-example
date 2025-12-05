@@ -197,10 +197,12 @@ function getTaskGraph(project, target) {
 }
 
 /**
- * Get config for the specified task only (not dependencies)
- * Since we use --excludeTaskDependencies, we only need to check the main task
+ * Get config for the specified task and its dependencies
+ * TODO: Expand to fetch full task graph for accurate I/O matching
+ * For now, returns just the main task config
  */
 function getTaskConfig(project, target) {
+  // TODO: Use `nx show project --json` or task graph to get all dependent task configs
   return [getNxProjectConfig(project, target)];
 }
 
@@ -523,9 +525,8 @@ async function main() {
   warmUpNxCache();
 
   // Run the Nx command with tracing
-  // Use --excludeTaskDependencies to only trace the specified task, not its dependencies
   const command = 'npx';
-  const commandArgs = ['nx', 'run', `${project}:${target}`, '--excludeTaskDependencies', ...extraArgs];
+  const commandArgs = ['nx', 'run', `${project}:${target}`, ...extraArgs];
 
   let results;
   if (currentPlatform === 'macos') {
