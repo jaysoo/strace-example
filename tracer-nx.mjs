@@ -15,7 +15,7 @@
 import { spawn, execSync } from 'child_process';
 import { dirname, relative, resolve, join } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, readFileSync, writeFileSync, unlinkSync, statSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, statSync, createWriteStream } from 'fs';
 import { platform } from 'os';
 
 process.env.NX_DAEMON ='false';
@@ -44,8 +44,25 @@ const CONFIG = {
     /\/project\.json$/,
     /\/package\.json$/,
     /^\.nx/,
+    // TypeScript configs
+    /tsconfig\..*\.json$/,
+    /tsconfig\.json$/,
+    // Jest configs
+    /jest\.config\.(ts|js|cts|mts|cjs|mjs)$/,
+    // ESLint configs
+    /eslint\.config\.(ts|js|cts|mts|cjs|mjs)$/,
+    /\.eslintrc/,
+    // Other workspace config files
+    /pnpm-workspace\.yaml$/,
+    /rust-toolchain\.toml$/,
+    /\.swcrc$/,
+    // Nx plugin files
+    /executors\.json$/,
+    /generators\.json$/,
+    /schema\.json$/,
   ],
   straceOutputFile: '/tmp/nx-tracer-strace.txt',
+  fsUsageOutputFile: '/tmp/nx-tracer-fsusage.txt',
 };
 
 /**
@@ -285,20 +302,17 @@ async function traceMacOS(command, args) {
     process.exit(1);
   }
 
+  // Create write stream for fs_usage output (avoid memory issues with large repos)
+  const outputStream = createWriteStream(CONFIG.fsUsageOutputFile);
+
   // Start fs_usage FIRST (without PID filter - we'll filter by path instead)
   // This captures all filesystem activity, which we filter to workspace only
   const fsUsageProcess = spawn('fs_usage', ['-w', '-f', 'filesys'], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  let fsUsageOutput = '';
-
-  fsUsageProcess.stdout.on('data', (data) => {
-    fsUsageOutput += data.toString();
-  });
-  fsUsageProcess.stderr.on('data', (data) => {
-    fsUsageOutput += data.toString();
-  });
+  fsUsageProcess.stdout.pipe(outputStream);
+  fsUsageProcess.stderr.pipe(outputStream);
 
   // Give fs_usage a moment to start
   await new Promise(r => setTimeout(r, 500));
@@ -334,6 +348,19 @@ async function traceMacOS(command, args) {
     fsUsageProcess.on('close', () => resolve());
     setTimeout(resolve, 1000);
   });
+
+  // Close the output stream
+  outputStream.end();
+  await new Promise(r => outputStream.on('close', r));
+
+  // Read and parse the output file
+  let fsUsageOutput = '';
+  try {
+    fsUsageOutput = readFileSync(CONFIG.fsUsageOutputFile, 'utf-8');
+    unlinkSync(CONFIG.fsUsageOutputFile);
+  } catch (err) {
+    console.error(`[tracer] Failed to read fs_usage output: ${err.message}`);
+  }
 
   return { exitCode, ...parseFsUsageOutput(fsUsageOutput) };
 }
@@ -594,7 +621,11 @@ async function main() {
   }, null, 2));
 }
 
-main().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
