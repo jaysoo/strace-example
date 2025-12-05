@@ -24,6 +24,83 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // This allows: `node /tracer/tracer-nx.mjs project:target` from /workspace
 const workspaceRoot = process.cwd();
 
+// Load namedInputs from nx.json
+let _namedInputsCache = null;
+function getNamedInputs() {
+  if (_namedInputsCache) return _namedInputsCache;
+  try {
+    const nxJsonPath = join(workspaceRoot, 'nx.json');
+    const nxJson = JSON.parse(readFileSync(nxJsonPath, 'utf-8'));
+    _namedInputsCache = nxJson.namedInputs || {};
+  } catch {
+    _namedInputsCache = {};
+  }
+  return _namedInputsCache;
+}
+
+/**
+ * Recursively resolve a named input to file patterns
+ * Handles: named inputs, file globs, negation patterns, runtime/external deps
+ */
+function resolveNamedInput(input, visited = new Set()) {
+  // Avoid infinite recursion
+  if (visited.has(input)) return [];
+
+  const namedInputs = getNamedInputs();
+
+  // If it's a string that matches a named input, resolve it
+  if (typeof input === 'string' && namedInputs[input]) {
+    visited.add(input);
+    const patterns = namedInputs[input];
+    return patterns.flatMap(p => resolveNamedInput(p, visited));
+  }
+
+  // If it's a dependency reference (^name), resolve the underlying named input
+  if (typeof input === 'string' && input.startsWith('^')) {
+    const name = input.slice(1);
+    if (namedInputs[name]) {
+      visited.add(input);
+      const patterns = namedInputs[name];
+      return patterns.flatMap(p => resolveNamedInput(p, visited));
+    }
+  }
+
+  // If it's a file pattern (string), return it
+  if (typeof input === 'string') {
+    return [input];
+  }
+
+  // Skip non-file inputs (runtime, externalDependencies, env)
+  if (typeof input === 'object') {
+    return [];
+  }
+
+  return [];
+}
+
+/**
+ * Expand inputs array, resolving all named inputs to file patterns
+ */
+function expandInputs(inputs) {
+  const expanded = [];
+  const negations = [];
+
+  for (const input of inputs) {
+    const resolved = resolveNamedInput(input);
+    for (const pattern of resolved) {
+      if (typeof pattern === 'string') {
+        if (pattern.startsWith('!')) {
+          negations.push(pattern.slice(1)); // Remove ! prefix for negation patterns
+        } else {
+          expanded.push(pattern);
+        }
+      }
+    }
+  }
+
+  return { patterns: expanded, negations };
+}
+
 // Configuration
 const CONFIG = {
   workspaceRoot,
@@ -62,6 +139,7 @@ const CONFIG = {
     // Nx plugin files
     /executors\.json$/,
     /generators\.json$/,
+    /migrations\.json$/,
     /schema\.json$/,
     // Git files (Nx scans for project detection)
     /\.gitignore$/,
@@ -74,6 +152,9 @@ const CONFIG = {
     /webpack\.config\.(ts|js|mjs|cjs)$/,
     // Husky
     /\.husky\//,
+    // Publishing artifacts (not task inputs)
+    /\.npmignore$/,
+    /LICENSE$/,
   ],
   straceOutputFile: '/tmp/nx-tracer-strace.txt',
   fsUsageOutputFile: '/tmp/nx-tracer-fsusage.txt',
@@ -216,36 +297,81 @@ function expandNxPath(pattern, projectRoot) {
 }
 
 /**
- * Check if a file path matches any of the declared patterns
+ * Convert a glob pattern to regex
  */
-function matchesPatterns(filePath, patterns, projectRoot) {
+function globToRegex(pattern) {
+  // First, handle glob ? (single char wildcard) before escaping
+  let regex = pattern.replace(/\?/g, '<<<SINGLECHAR>>>');
+
+  // Handle **/* BEFORE escaping (captures "any path depth including root")
+  regex = regex.replace(/\*\*\/\*/g, '<<<ANYPATH>>>');
+
+  // Handle ** BEFORE escaping
+  regex = regex.replace(/\*\*/g, '<<<GLOBSTAR>>>');
+
+  // Escape special regex chars except *
+  regex = regex.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
+  // Handle * as "any chars except /"
+  regex = regex.replace(/\*/g, '[^/]*');
+
+  // Restore patterns
+  regex = regex.replace(/<<<ANYPATH>>>/g, '(?:.*/)?[^/]+');
+  regex = regex.replace(/<<<GLOBSTAR>>>/g, '.*');
+  regex = regex.replace(/<<<SINGLECHAR>>>/g, '.');
+
+  return new RegExp('^' + regex + '$');
+}
+
+/**
+ * Check if a file path matches a single pattern
+ */
+function matchesSinglePattern(absolutePath, pattern, projectRoot) {
+  const expandedPattern = expandNxPath(pattern, projectRoot);
+  const absolutePattern = expandedPattern.startsWith('/')
+    ? expandedPattern
+    : join(CONFIG.workspaceRoot, expandedPattern);
+
+  // Glob matching
+  if (absolutePattern.includes('*') || absolutePattern.includes('?')) {
+    const regex = globToRegex(absolutePattern);
+    return regex.test(absolutePath);
+  } else {
+    // Exact match or prefix match for directories
+    return absolutePath === absolutePattern || absolutePath.startsWith(absolutePattern + '/');
+  }
+}
+
+/**
+ * Check if a file path matches any of the declared patterns (with named input resolution)
+ */
+function matchesPatterns(filePath, inputs, projectRoot) {
   const absolutePath = filePath.startsWith('/')
     ? filePath
     : join(CONFIG.workspaceRoot, filePath);
 
+  // Expand named inputs to file patterns
+  const { patterns, negations } = expandInputs(inputs);
+
+  // Check if file matches any positive pattern
+  let matches = false;
   for (const pattern of patterns) {
-    // Skip non-file patterns (like ^default, externalDependencies, etc.)
-    if (typeof pattern !== 'string' || pattern.startsWith('^') || pattern.startsWith('!')) {
-      continue;
-    }
-
-    const expandedPattern = expandNxPath(pattern, projectRoot);
-    const absolutePattern = expandedPattern.startsWith('/')
-      ? expandedPattern
-      : join(CONFIG.workspaceRoot, expandedPattern);
-
-    // Simple glob matching (just * for now)
-    if (absolutePattern.includes('*')) {
-      const regex = new RegExp('^' + absolutePattern.replace(/\*/g, '.*') + '$');
-      if (regex.test(absolutePath)) return true;
-    } else {
-      // Exact match or prefix match for directories
-      if (absolutePath === absolutePattern || absolutePath.startsWith(absolutePattern + '/')) {
-        return true;
-      }
+    if (matchesSinglePattern(absolutePath, pattern, projectRoot)) {
+      matches = true;
+      break;
     }
   }
-  return false;
+
+  if (!matches) return false;
+
+  // Check if file matches any negation pattern (exclusion)
+  for (const negation of negations) {
+    if (matchesSinglePattern(absolutePath, negation, projectRoot)) {
+      return false; // Excluded by negation
+    }
+  }
+
+  return true;
 }
 
 // ============================================================================
