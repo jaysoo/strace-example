@@ -17,8 +17,14 @@ services:
       - .:/workspace
       # Use separate node_modules for container (don't share with host)
       - ebpf_node_modules:/workspace/node_modules
+      # Isolate pnpm store from host
+      - ebpf_pnpm_store:/workspace/.pnpm-store
       # Required for eBPF (may not all exist on Docker Desktop)
       - /sys/kernel/debug:/sys/kernel/debug:rw
+    environment:
+      # Ensure npm/pnpm don't use host caches
+      - npm_config_cache=/tmp/.npm
+      - PNPM_HOME=/tmp/.pnpm
     working_dir: /workspace
     stdin_open: true
     tty: true
@@ -26,3 +32,4 @@ services:
 
 volumes:
   ebpf_node_modules:
+  ebpf_pnpm_store:
