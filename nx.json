@@ -28,7 +28,5 @@
       "dependsOn": ["^build"],
       "inputs": ["default", "^default"]
     }
-  },
-  "nxCloudId": "69331cb3bb76101c7b29b533",
-  "nxCloudUrl": "https://staging.nx.app"
+  }
 }
