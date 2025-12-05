@@ -322,14 +322,20 @@ async function traceMacOS(command, args) {
 
   // Give fs_usage a moment to capture final events
   await new Promise(r => setTimeout(r, 1000));
+
+  // Unpipe before killing to prevent write-after-end errors
+  fsUsageProcess.stdout.unpipe(outputStream);
+  fsUsageProcess.stderr.unpipe(outputStream);
+
   fsUsageProcess.kill('SIGINT');
 
+  // Wait for fs_usage to fully exit
   await new Promise((resolve) => {
     fsUsageProcess.on('close', () => resolve());
-    setTimeout(resolve, 1000);
+    setTimeout(resolve, 2000); // Longer timeout to ensure clean exit
   });
 
-  // Close the output stream
+  // Close the output stream after fs_usage has exited
   outputStream.end();
   await new Promise(r => outputStream.on('close', r));
 
