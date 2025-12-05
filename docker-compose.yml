@@ -1,10 +1,13 @@
 # Docker Compose for eBPF I/O tracing PoC
 #
-# Usage:
+# Usage (io-tracing repo):
 #   docker compose up -d
+#   docker compose exec ebpf node tracer-nx.mjs data-processor:process-data
+#
+# Usage (nx repo - pass WORKSPACE_PATH):
+#   WORKSPACE_PATH=/Users/jack/projects/nx docker compose up -d
 #   docker compose exec ebpf bash
-#   # Inside container:
-#   pnpm install && node tracer-nx.mjs data-processor:process-data
+#   # Inside container: pnpm install && node /tracer/tracer-nx.mjs js:build
 
 services:
   ebpf:
@@ -13,9 +16,11 @@ services:
     pid: host
     network_mode: host
     volumes:
-      # Mount the PoC directory
-      - .:/workspace
-      # Use separate node_modules for container (don't share with host)
+      # Mount target workspace (default: current directory)
+      - ${WORKSPACE_PATH:-.}:/workspace
+      # Mount tracer scripts (always available at /tracer)
+      - .:/tracer
+      # Use separate node_modules for container
       - ebpf_node_modules:/workspace/node_modules
       # Isolate pnpm store from host
       - ebpf_pnpm_store:/workspace/.pnpm-store
@@ -32,7 +37,7 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
-    command: sh -c "pnpm install --frozen-lockfile 2>/dev/null || pnpm install && tail -f /dev/null"
+    command: tail -f /dev/null
 
 volumes:
   ebpf_node_modules:

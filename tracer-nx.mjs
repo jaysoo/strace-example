@@ -22,9 +22,13 @@ process.env.NX_DAEMON ='false';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Detect workspace root: use cwd (not script location) for cross-directory invocation
+// This allows: `node /tracer/tracer-nx.mjs project:target` from /workspace
+const workspaceRoot = process.cwd();
+
 // Configuration
 const CONFIG = {
-  workspaceRoot: resolve(__dirname),
+  workspaceRoot,
   ignoredDirs: ['node_modules', '.nx', '.git', '.angular', '.pnpm-store', 'proc', 'dev', 'sys', 'private', 'var', 'tmp'],
   // Files that Nx reads during task execution (infrastructure, not task-specific)
   nxInfraFiles: [
@@ -572,15 +576,19 @@ async function main() {
   console.log('TRACING RESULTS');
   console.log('='.repeat(60));
 
+  // Filter to only show files relevant to the project
+  const relevantReads = taskReads.filter(f => isRelevantToProject(f) && !isDirectory(f));
+  const relevantWrites = taskWrites.filter(f => isRelevantToProject(f) && !isDirectory(f));
+
   console.log('');
-  console.log('FILES READ:');
-  if (taskReads.length === 0) {
-    console.log('  (none detected in workspace)');
+  console.log(`FILES READ (${relevantReads.length} files in project scope):`);
+  if (relevantReads.length === 0) {
+    console.log('  (none detected in project scope)');
   } else {
-    taskReads.forEach(f => {
+    relevantReads.forEach(f => {
       const matchingTask = findMatchingInputTask(f, taskConfigs);
       if (matchingTask) {
-        console.log(`  ✓ ${f} (${matchingTask})`);
+        console.log(`  ✓ ${f}`);
       } else {
         console.log(`  ✗ ${f}`);
       }
@@ -588,14 +596,14 @@ async function main() {
   }
 
   console.log('');
-  console.log('FILES WRITTEN:');
-  if (taskWrites.length === 0) {
-    console.log('  (none detected in workspace)');
+  console.log(`FILES WRITTEN (${relevantWrites.length} files in project scope):`);
+  if (relevantWrites.length === 0) {
+    console.log('  (none detected in project scope)');
   } else {
-    taskWrites.forEach(f => {
+    relevantWrites.forEach(f => {
       const matchingTask = findMatchingOutputTask(f, taskConfigs);
       if (matchingTask) {
-        console.log(`  ✓ ${f} (${matchingTask})`);
+        console.log(`  ✓ ${f}`);
       } else {
         console.log(`  ✗ ${f}`);
       }
