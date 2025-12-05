@@ -2,8 +2,8 @@
 /**
  * Nx-aware I/O Tracer - Traces file I/O and compares against declared inputs/outputs
  *
- * Usage: [sudo] node tracer-nx.mjs <project>:<target>
- * Example: sudo node tracer-nx.mjs data-processor:process-data
+ * Usage: [sudo] node tracer-nx.mjs <project>:<target> [nx-options]
+ * Example: sudo node tracer-nx.mjs data-processor:process-data --skip-nx-cache
  *
  * Auto-detects platform:
  *   - macOS: uses fs_usage (requires sudo)
@@ -301,12 +301,13 @@ async function main() {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || !args[0].includes(':')) {
-    console.log('Usage: [sudo] node tracer-nx.mjs <project>:<target>');
-    console.log('Example: sudo node tracer-nx.mjs data-processor:process-data');
+    console.log('Usage: [sudo] node tracer-nx.mjs <project>:<target> [nx-options]');
+    console.log('Example: sudo node tracer-nx.mjs data-processor:process-data --skip-nx-cache');
     process.exit(1);
   }
 
   const [project, target] = args[0].split(':');
+  const extraArgs = args.slice(1); // Pass through any additional args to nx
   const currentPlatform = getPlatform();
 
   console.log('='.repeat(60));
@@ -333,7 +334,7 @@ async function main() {
 
   // Run the Nx command with tracing
   const command = 'npx';
-  const commandArgs = ['nx', 'run', `${project}:${target}`, '--skip-nx-cache'];
+  const commandArgs = ['nx', 'run', `${project}:${target}`, ...extraArgs];
 
   let results;
   if (currentPlatform === 'macos') {
