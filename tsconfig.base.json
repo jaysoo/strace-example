@@ -15,6 +15,7 @@
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "data-fetcher": ["libs/data-fetcher/src/index.ts"],
       "data-processor": ["libs/data-processor/src/index.ts"]
     }
   },

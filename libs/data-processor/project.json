@@ -17,6 +17,7 @@
     },
     "process-data": {
       "executor": "nx:run-commands",
+      "dependsOn": ["data-fetcher:process-data"],
       "inputs": [
         "{projectRoot}/data/input.txt"
       ],

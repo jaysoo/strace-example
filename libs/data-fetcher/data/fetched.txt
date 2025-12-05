@@ -1,0 +1,3 @@
+FETCHED: SOURCE DATA FOR FETCHER
+This is declared input data.
+Timestamp: 2025-12-05T17:05:41.461Z

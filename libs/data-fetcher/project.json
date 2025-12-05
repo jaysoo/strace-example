@@ -1,0 +1,18 @@
+{
+  "name": "data-fetcher",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/data-fetcher/src",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "process-data": {
+      "executor": "nx:run-commands",
+      "inputs": ["{projectRoot}/data/source.txt"],
+      "outputs": ["{projectRoot}/data/fetched.txt"],
+      "options": {
+        "command": "node {projectRoot}/scripts/fetch.mjs",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

@@ -62,6 +62,7 @@ function getNxProjectConfig(project, target) {
     }
 
     return {
+      project,
       root: config.root,
       target: targetConfig,
       inputs: targetConfig.inputs || [],
@@ -70,6 +71,71 @@ function getNxProjectConfig(project, target) {
   } catch (err) {
     throw new Error(`Failed to get Nx project config: ${err.message}`);
   }
+}
+
+/**
+ * Get all tasks that will run (including dependencies) using nx graph
+ */
+function getTaskGraph(project, target) {
+  try {
+    const output = execSync(`npx nx graph --targets=${target} --focus=${project} --file=stdout`, {
+      cwd: CONFIG.workspaceRoot,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, NX_DAEMON: 'false' },
+    });
+    const graph = JSON.parse(output);
+
+    // Extract all project:target pairs that will run
+    const tasks = [];
+    const visited = new Set();
+
+    function collectDeps(projName) {
+      if (visited.has(projName)) return;
+      visited.add(projName);
+
+      const deps = graph.graph?.dependencies?.[projName] || [];
+      for (const dep of deps) {
+        collectDeps(dep.target);
+      }
+      tasks.push(projName);
+    }
+
+    collectDeps(project);
+    return tasks;
+  } catch (err) {
+    // Fallback: just return the main project
+    console.log(`[tracer] Could not get task graph, checking main task only`);
+    return [project];
+  }
+}
+
+/**
+ * Get configs for all tasks in the dependency chain
+ */
+function getAllTaskConfigs(project, target) {
+  const configs = [];
+
+  // Get the main task config
+  const mainConfig = getNxProjectConfig(project, target);
+  configs.push(mainConfig);
+
+  // Check for dependsOn in the target
+  const dependsOn = mainConfig.target.dependsOn || [];
+  for (const dep of dependsOn) {
+    // Handle "project:target" format
+    if (typeof dep === 'string' && dep.includes(':')) {
+      const [depProject, depTarget] = dep.split(':');
+      try {
+        const depConfig = getNxProjectConfig(depProject, depTarget);
+        configs.push(depConfig);
+      } catch (err) {
+        console.log(`[tracer] Warning: Could not get config for ${dep}`);
+      }
+    }
+  }
+
+  return configs;
 }
 
 /**
@@ -297,6 +363,30 @@ function isRelevantPath(filePath) {
 // Main
 // ============================================================================
 
+/**
+ * Check if a file matches any task's declared inputs
+ */
+function findMatchingInputTask(filePath, taskConfigs) {
+  for (const config of taskConfigs) {
+    if (matchesPatterns(filePath, config.inputs, config.root)) {
+      return config.project;
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if a file matches any task's declared outputs
+ */
+function findMatchingOutputTask(filePath, taskConfigs) {
+  for (const config of taskConfigs) {
+    if (matchesPatterns(filePath, config.outputs, config.root)) {
+      return config.project;
+    }
+  }
+  return null;
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -324,12 +414,13 @@ async function main() {
     process.exit(1);
   }
 
-  // Get Nx project configuration
-  console.log('[tracer] Fetching Nx project configuration...');
-  const projectConfig = getNxProjectConfig(project, target);
-  console.log(`[tracer] Project root: ${projectConfig.root}`);
-  console.log(`[tracer] Declared inputs: ${projectConfig.inputs.length} patterns`);
-  console.log(`[tracer] Declared outputs: ${projectConfig.outputs.length} patterns`);
+  // Get Nx project configurations for all tasks in the dependency chain
+  console.log('[tracer] Fetching Nx project configurations...');
+  const taskConfigs = getAllTaskConfigs(project, target);
+  console.log(`[tracer] Found ${taskConfigs.length} task(s) to trace:`);
+  for (const config of taskConfigs) {
+    console.log(`[tracer]   - ${config.project}:${target} (${config.inputs.length} inputs, ${config.outputs.length} outputs)`);
+  }
   console.log('');
 
   // Run the Nx command with tracing
@@ -346,12 +437,12 @@ async function main() {
   console.log('');
   console.log(`[tracer] Process exited with code ${results.exitCode}`);
 
-  // Compare against declared inputs/outputs
+  // Compare against declared inputs/outputs across ALL tasks
   const undeclaredReads = results.reads.filter(
-    f => !matchesPatterns(f, projectConfig.inputs, projectConfig.root)
+    f => !findMatchingInputTask(f, taskConfigs)
   );
   const undeclaredWrites = results.writes.filter(
-    f => !matchesPatterns(f, projectConfig.outputs, projectConfig.root)
+    f => !findMatchingOutputTask(f, taskConfigs)
   );
 
   // Print results
@@ -366,8 +457,12 @@ async function main() {
     console.log('  (none detected in workspace)');
   } else {
     results.reads.forEach(f => {
-      const isDeclared = matchesPatterns(f, projectConfig.inputs, projectConfig.root);
-      console.log(`  ${isDeclared ? '✓' : '✗'} ${f}`);
+      const matchingTask = findMatchingInputTask(f, taskConfigs);
+      if (matchingTask) {
+        console.log(`  ✓ ${f} (${matchingTask})`);
+      } else {
+        console.log(`  ✗ ${f}`);
+      }
     });
   }
 
@@ -377,8 +472,12 @@ async function main() {
     console.log('  (none detected in workspace)');
   } else {
     results.writes.forEach(f => {
-      const isDeclared = matchesPatterns(f, projectConfig.outputs, projectConfig.root);
-      console.log(`  ${isDeclared ? '✓' : '✗'} ${f}`);
+      const matchingTask = findMatchingOutputTask(f, taskConfigs);
+      if (matchingTask) {
+        console.log(`  ✓ ${f} (${matchingTask})`);
+      } else {
+        console.log(`  ✗ ${f}`);
+      }
     });
   }
 
@@ -391,13 +490,13 @@ async function main() {
 
     if (undeclaredReads.length > 0) {
       console.log('');
-      console.log('Undeclared inputs (files read but not in inputs):');
+      console.log('Undeclared inputs (files read but not in any task inputs):');
       undeclaredReads.forEach(f => console.log(`  - ${f}`));
     }
 
     if (undeclaredWrites.length > 0) {
       console.log('');
-      console.log('Undeclared outputs (files written but not in outputs):');
+      console.log('Undeclared outputs (files written but not in any task outputs):');
       undeclaredWrites.forEach(f => console.log(`  - ${f}`));
     }
   } else {
@@ -409,8 +508,7 @@ async function main() {
   console.log('');
   console.log('JSON OUTPUT:');
   console.log(JSON.stringify({
-    project,
-    target,
+    tasks: taskConfigs.map(c => `${c.project}:${target}`),
     reads: results.reads,
     writes: results.writes,
     undeclaredReads,
