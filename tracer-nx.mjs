@@ -43,6 +43,7 @@ const CONFIG = {
   nxInfraPatterns: [
     /\/project\.json$/,
     /\/package\.json$/,
+    /^project\.json$/,
     /^\.nx/,
     // TypeScript configs
     /tsconfig\..*\.json$/,
@@ -60,6 +61,17 @@ const CONFIG = {
     /executors\.json$/,
     /generators\.json$/,
     /schema\.json$/,
+    // Git files (Nx scans for project detection)
+    /\.gitignore$/,
+    /\.gitattributes$/,
+    // Environment files
+    /\.env/,
+    /\.local\.env$/,
+    // Rspack/webpack configs (Nx plugin detection)
+    /rspack\.config\.(ts|js|mjs|cjs)$/,
+    /webpack\.config\.(ts|js|mjs|cjs)$/,
+    // Husky
+    /\.husky\//,
   ],
   straceOutputFile: '/tmp/nx-tracer-strace.txt',
   fsUsageOutputFile: '/tmp/nx-tracer-fsusage.txt',
@@ -527,13 +539,31 @@ async function main() {
   const taskReads = results.reads.filter(f => !isNxInfrastructure(f));
   const taskWrites = results.writes.filter(f => !isNxInfrastructure(f));
 
+  // Get project root for filtering
+  const projectRoot = taskConfigs[0]?.root || '';
+
+  // Helper to check if a file is relevant to this project
+  // (in project root, or in a shared location like libs/)
+  const isRelevantToProject = (filePath) => {
+    // Files in the project root are always relevant
+    if (filePath.startsWith(projectRoot + '/') || filePath === projectRoot) {
+      return true;
+    }
+    // Root-level files might be relevant (e.g., shared configs)
+    if (!filePath.includes('/')) {
+      return true;
+    }
+    // Files in other projects/directories are likely Nx scanning, not task I/O
+    return false;
+  };
+
   // Compare against declared inputs/outputs across ALL tasks
-  // Filter out directories - we only care about files
+  // Filter out directories and files outside the project
   const undeclaredReads = taskReads.filter(
-    f => !isDirectory(f) && !findMatchingInputTask(f, taskConfigs)
+    f => !isDirectory(f) && isRelevantToProject(f) && !findMatchingInputTask(f, taskConfigs)
   );
   const undeclaredWrites = taskWrites.filter(
-    f => !isDirectory(f) && !findMatchingOutputTask(f, taskConfigs)
+    f => !isDirectory(f) && isRelevantToProject(f) && !findMatchingOutputTask(f, taskConfigs)
   );
 
   // Print results
