@@ -24,9 +24,11 @@ docker compose exec ebpf node tracer-nx.mjs data-processor:process-data
 
 It then:
 1. Fetches the Nx project's declared `inputs` and `outputs`
-2. Runs the task while tracing all file I/O
+2. Runs the task with `--skip-nx-cache` while tracing all file I/O
 3. Compares actual I/O against declared patterns
 4. Reports mismatches (✗ = undeclared, ✓ = declared)
+
+> **Note**: The tracer uses `--skip-nx-cache` to guarantee the task actually runs. If a task is cached, there's no I/O to trace. In a future Nx Cloud integration, this could be a "re-run without cache" action.
 
 ## Test Project
 
