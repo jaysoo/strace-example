@@ -52,6 +52,8 @@ cat > "$TRACER_DIR/docker-compose.yml" << EOF
 #   docker compose down
 #
 
+name: ${WORKSPACE_NAME}-io-tracer
+
 services:
   tracer:
     build: .

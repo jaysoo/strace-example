@@ -228,12 +228,17 @@ function getNxProjectConfig(project, target) {
       throw new Error(`Target "${target}" not found in project "${project}"`);
     }
 
+    // Check if task is cacheable - if not, inputs don't matter for caching
+    const isCacheable = targetConfig.cache === true ||
+      (targetConfig.cache !== false && (targetConfig.inputs || targetConfig.outputs));
+
     return {
       project,
       root: config.root,
       target: targetConfig,
       inputs: targetConfig.inputs || [],
       outputs: targetConfig.outputs || [],
+      cache: isCacheable,
     };
   } catch (err) {
     throw new Error(`Failed to get Nx project config: ${err.message}`);
@@ -729,9 +734,21 @@ async function main() {
   // Get Nx project configurations for all tasks in the dependency chain
   console.log('[tracer] Fetching Nx project configurations...');
   const taskConfigs = getTaskConfig(project, target);
+
+  // Check if main task is cacheable
+  const mainTask = taskConfigs.find(c => c.project === project);
+  if (mainTask && !mainTask.cache) {
+    console.log('');
+    console.log('⚠️  WARNING: This task is not cacheable (cache: false or no inputs/outputs)');
+    console.log('   Undeclared inputs will not affect caching behavior.');
+    console.log('   Consider adding `cache: true` to the target configuration if caching is desired.');
+    console.log('');
+  }
+
   console.log(`[tracer] Found ${taskConfigs.length} task(s) to trace:`);
   for (const config of taskConfigs) {
-    console.log(`[tracer]   - ${config.project}:${target} (${config.inputs.length} inputs, ${config.outputs.length} outputs)`);
+    const cacheStatus = config.cache ? '✓ cacheable' : '✗ not cacheable';
+    console.log(`[tracer]   - ${config.project}:${config.target.name || target} (${config.inputs.length} inputs, ${config.outputs.length} outputs) [${cacheStatus}]`);
   }
 
   // Get resolved file inputs using HashPlanInspector (Nx's internal logic)

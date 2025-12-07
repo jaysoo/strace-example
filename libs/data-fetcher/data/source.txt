@@ -1,2 +1,0 @@
-SOURCE DATA FOR FETCHER
-This is declared input data.
