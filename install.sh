@@ -39,8 +39,12 @@ cp "$SCRIPT_DIR/run-all-traces.mjs" "$TRACER_DIR/"
 cp "$SCRIPT_DIR/AI.md" "$TRACER_DIR/"
 
 # Generate docker-compose.yml tailored for this workspace
-cat > "$TRACER_DIR/docker-compose.yml" << 'EOF'
+# Use workspace directory name as volume prefix to avoid conflicts
+WORKSPACE_NAME=$(basename "$WORKSPACE_PATH")
+
+cat > "$TRACER_DIR/docker-compose.yml" << EOF
 # Docker Compose for Nx I/O Tracer
+# Workspace: $WORKSPACE_NAME
 #
 # Usage:
 #   docker compose up -d
@@ -54,6 +58,12 @@ services:
     privileged: true
     pid: host
     network_mode: host
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
     volumes:
       # Mount workspace root (two levels up from .nx/io-tracer)
       - ../..:/workspace
@@ -64,17 +74,17 @@ services:
       # These directories are created in Docker and not shared with host
       # ============================================================
       # Node dependencies
-      - tracer_node_modules:/workspace/node_modules
-      - tracer_pnpm_store:/workspace/.pnpm-store
+      - ${WORKSPACE_NAME}_node_modules:/workspace/node_modules
+      - ${WORKSPACE_NAME}_pnpm_store:/workspace/.pnpm-store
       # Nx cache
-      - tracer_nx_cache:/workspace/.nx
+      - ${WORKSPACE_NAME}_nx_cache:/workspace/.nx
       # Build outputs (dist, tmp, build, coverage)
-      - tracer_dist:/workspace/dist
-      - tracer_tmp:/workspace/tmp
-      - tracer_build:/workspace/build
-      - tracer_coverage:/workspace/coverage
+      - ${WORKSPACE_NAME}_dist:/workspace/dist
+      - ${WORKSPACE_NAME}_tmp:/workspace/tmp
+      - ${WORKSPACE_NAME}_build:/workspace/build
+      - ${WORKSPACE_NAME}_coverage:/workspace/coverage
       # Rust/Cargo (if workspace uses Rust)
-      - tracer_cargo_target:/workspace/target
+      - ${WORKSPACE_NAME}_cargo_target:/workspace/target
       # Required for eBPF (may not exist on Docker Desktop)
       - /sys/kernel/debug:/sys/kernel/debug:rw
     environment:
@@ -86,14 +96,14 @@ services:
     command: tail -f /dev/null
 
 volumes:
-  tracer_node_modules:
-  tracer_pnpm_store:
-  tracer_nx_cache:
-  tracer_dist:
-  tracer_tmp:
-  tracer_build:
-  tracer_coverage:
-  tracer_cargo_target:
+  ${WORKSPACE_NAME}_node_modules:
+  ${WORKSPACE_NAME}_pnpm_store:
+  ${WORKSPACE_NAME}_nx_cache:
+  ${WORKSPACE_NAME}_dist:
+  ${WORKSPACE_NAME}_tmp:
+  ${WORKSPACE_NAME}_build:
+  ${WORKSPACE_NAME}_coverage:
+  ${WORKSPACE_NAME}_cargo_target:
 EOF
 
 # Create a convenience run script
@@ -113,21 +123,32 @@ if [[ -z "$1" ]]; then
   exit 1
 fi
 
-# Ensure container is running
-if ! docker compose ps --status running | grep -q tracer; then
+setup_container() {
   echo "Starting tracer container..."
   docker compose up -d
   echo "Installing dependencies (first run may take a few minutes)..."
-  docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -5"
+  # Detect package manager from lockfile
+  if docker compose exec tracer test -f /workspace/pnpm-lock.yaml 2>/dev/null; then
+    docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -5"
+  elif docker compose exec tracer test -f /workspace/yarn.lock 2>/dev/null; then
+    docker compose exec tracer bash -c "CI=true yarn install 2>&1 | tail -5"
+  else
+    docker compose exec tracer bash -c "CI=true npm install 2>&1 | tail -5"
+  fi
+  echo "Resetting Nx cache..."
+  docker compose exec tracer bash -c "npx nx reset 2>&1 || true"
+}
+
+# Ensure container is running
+if ! docker compose ps --status running | grep -q tracer; then
+  setup_container
 fi
 
 # Verify tracer script is mounted (recreate container if not)
 if ! docker compose exec tracer test -f /tracer/tracer-nx.mjs 2>/dev/null; then
   echo "Tracer script not mounted, recreating container..."
   docker compose down
-  docker compose up -d
-  echo "Installing dependencies..."
-  docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -5"
+  setup_container
 fi
 
 # Run the tracer
@@ -192,7 +213,18 @@ docker compose up -d --build
 
 echo ""
 echo "Installing dependencies (this may take a few minutes on first run)..."
-docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -10"
+# Detect package manager from lockfile
+if docker compose exec tracer test -f /workspace/pnpm-lock.yaml 2>/dev/null; then
+  docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -10"
+elif docker compose exec tracer test -f /workspace/yarn.lock 2>/dev/null; then
+  docker compose exec tracer bash -c "CI=true yarn install 2>&1 | tail -10"
+else
+  docker compose exec tracer bash -c "CI=true npm install 2>&1 | tail -10"
+fi
+
+echo ""
+echo "Resetting Nx cache (avoids stale graph issues)..."
+docker compose exec tracer bash -c "npx nx reset 2>&1 || true"
 
 echo ""
 echo "============================================================"

@@ -278,13 +278,56 @@ function getTaskGraph(project, target) {
 }
 
 /**
- * Get config for the specified task and its dependencies
- * TODO: Expand to fetch full task graph for accurate I/O matching
- * For now, returns just the main task config
+ * Get config for the specified task and its same-project dependencies
+ * Recursively collects configs from dependsOn tasks within the same project
  */
 function getTaskConfig(project, target) {
-  // TODO: Use `nx show project --json` or task graph to get all dependent task configs
-  return [getNxProjectConfig(project, target)];
+  const configs = [];
+  const visited = new Set();
+
+  function collectConfigs(proj, tgt) {
+    const key = `${proj}:${tgt}`;
+    if (visited.has(key)) return;
+    visited.add(key);
+
+    try {
+      const config = getNxProjectConfig(proj, tgt);
+      configs.push(config);
+
+      // Recursively collect dependsOn tasks within the same project
+      const dependsOn = config.target.dependsOn || [];
+      for (const dep of dependsOn) {
+        let depTarget = null;
+        let depProject = proj; // Default to same project
+
+        if (typeof dep === 'string') {
+          // Skip cross-project deps (^target) and self-refs
+          if (dep.startsWith('^')) continue;
+          if (dep.includes(':')) {
+            // Explicit project:target format
+            const [p, t] = dep.split(':');
+            if (p !== proj && p !== 'self') continue; // Skip other projects
+            depTarget = t;
+          } else {
+            depTarget = dep;
+          }
+        } else if (typeof dep === 'object' && dep.target) {
+          // Object form: { target: "build-native", projects: "self" }
+          if (dep.projects && dep.projects !== 'self') continue;
+          depTarget = dep.target;
+        }
+
+        if (depTarget) {
+          collectConfigs(depProject, depTarget);
+        }
+      }
+    } catch (err) {
+      // Target may not exist, skip silently
+    }
+  }
+
+  collectConfigs(project, target);
+  return configs;
 }
 
 /**
