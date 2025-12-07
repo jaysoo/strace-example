@@ -35,6 +35,8 @@ mkdir -p "$TRACER_DIR"
 # Copy files
 cp "$SCRIPT_DIR/Dockerfile" "$TRACER_DIR/"
 cp "$SCRIPT_DIR/tracer-nx.mjs" "$TRACER_DIR/"
+cp "$SCRIPT_DIR/run-all-traces.mjs" "$TRACER_DIR/"
+cp "$SCRIPT_DIR/AI.md" "$TRACER_DIR/"
 
 # Generate docker-compose.yml tailored for this workspace
 cat > "$TRACER_DIR/docker-compose.yml" << 'EOF'
@@ -116,7 +118,16 @@ if ! docker compose ps --status running | grep -q tracer; then
   echo "Starting tracer container..."
   docker compose up -d
   echo "Installing dependencies (first run may take a few minutes)..."
-  docker compose exec tracer bash -c "pnpm install --ignore-scripts 2>&1 | tail -5"
+  docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -5"
+fi
+
+# Verify tracer script is mounted (recreate container if not)
+if ! docker compose exec tracer test -f /tracer/tracer-nx.mjs 2>/dev/null; then
+  echo "Tracer script not mounted, recreating container..."
+  docker compose down
+  docker compose up -d
+  echo "Installing dependencies..."
+  docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -5"
 fi
 
 # Run the tracer
@@ -173,29 +184,27 @@ docker compose exec tracer bash
 4. Reports mismatches (undeclared reads/writes)
 EOF
 
-# Add to .gitignore if it exists
-if [[ -f "$WORKSPACE_PATH/.gitignore" ]]; then
-  if ! grep -q "^\.io-tracer/$" "$WORKSPACE_PATH/.gitignore" 2>/dev/null; then
-    echo "" >> "$WORKSPACE_PATH/.gitignore"
-    echo "# Nx I/O Tracer" >> "$WORKSPACE_PATH/.gitignore"
-    echo ".io-tracer/" >> "$WORKSPACE_PATH/.gitignore"
-    echo "Added .io-tracer/ to .gitignore"
-  fi
-fi
+# Start the container and install dependencies
+echo ""
+echo "Building and starting container..."
+cd "$TRACER_DIR"
+docker compose up -d --build
 
 echo ""
-echo "Installation complete!"
+echo "Installing dependencies (this may take a few minutes on first run)..."
+docker compose exec tracer bash -c "CI=true pnpm install 2>&1 | tail -10"
+
 echo ""
-echo "Quick start:"
+echo "============================================================"
+echo "Installation complete! Ready to use."
+echo "============================================================"
+echo ""
+echo "Run a trace:"
 echo "  cd $TRACER_DIR"
-echo "  docker compose up -d"
-echo "  # Wait for container to start, then install deps (first time only):"
-echo "  docker compose exec tracer pnpm install"
-echo "  # Run tracer:"
 echo "  ./trace.sh <project>:<target> --skip-nx-cache"
 echo ""
-echo "Or use the convenience script directly:"
-echo "  $TRACER_DIR/trace.sh <project>:<target> --skip-nx-cache"
+echo "Or with isolated task (no dependencies):"
+echo "  ./trace.sh <project>:<target> --skip-nx-cache --excludeTaskDependencies"
 echo ""
 echo "To stop:"
 echo "  cd $TRACER_DIR && docker compose down"
