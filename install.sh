@@ -4,12 +4,12 @@
 #
 # Usage: ./install.sh /path/to/nx-workspace
 #
-# This creates a .io-tracer directory in your workspace with:
+# This creates a .nx/io-tracer directory in your workspace with:
 #   - docker-compose.yml
 #   - Dockerfile
 #   - tracer-nx.mjs
 #
-# Then run: cd /path/to/nx-workspace/.io-tracer && docker compose up -d
+# Then run: cd /path/to/nx-workspace/.nx/io-tracer && docker compose up -d
 #
 
 set -e
@@ -28,8 +28,8 @@ fi
 
 echo "Installing io-tracer into: $WORKSPACE_PATH"
 
-# Create .io-tracer directory
-TRACER_DIR="$WORKSPACE_PATH/.io-tracer"
+# Create .nx/io-tracer directory (inside .nx which is already ignored by Nx)
+TRACER_DIR="$WORKSPACE_PATH/.nx/io-tracer"
 mkdir -p "$TRACER_DIR"
 
 # Copy files
@@ -55,8 +55,8 @@ services:
     pid: host
     network_mode: host
     volumes:
-      # Mount parent directory (the Nx workspace)
-      - ..:/workspace
+      # Mount workspace root (two levels up from .nx/io-tracer)
+      - ../..:/workspace
       # Mount tracer scripts
       - .:/tracer
       # ============================================================

@@ -4,7 +4,7 @@ Instructions for checking all projects and tasks for misconfigured inputs/output
 
 ## Prerequisites
 
-1. **io-tracer installed** - Check for `.io-tracer/` directory in workspace root
+1. **io-tracer installed** - Check for `.nx/io-tracer/` directory in workspace root
 2. **Docker running** - The tracer runs in a Docker container with `strace`
 
 ## Setup (if not already installed)
@@ -13,8 +13,8 @@ Instructions for checking all projects and tasks for misconfigured inputs/output
 # Install from io-tracing repo
 /Users/jack/projects/io-tracing/install.sh /path/to/nx-workspace
 
-# Or if .io-tracer already exists, just start the container
-cd /path/to/nx-workspace/.io-tracer
+# Or if .nx/io-tracer already exists, just start the container
+cd /path/to/nx-workspace/.nx/io-tracer
 docker compose up -d
 docker compose exec tracer pnpm install
 ```
@@ -24,7 +24,7 @@ docker compose exec tracer pnpm install
 ### Option 1: Use run-all-traces.mjs (Recommended)
 
 ```bash
-cd .io-tracer
+cd .nx/io-tracer
 docker compose exec tracer node /tracer/run-all-traces.mjs 2>&1
 ```
 
@@ -63,23 +63,23 @@ This is useful when:
 ### Check RESULTS.md
 
 ```bash
-cat .io-tracer/results/RESULTS.md
+cat .nx/io-tracer/results/RESULTS.md
 ```
 
 ### Check Individual Task Results
 
 ```bash
 # List all result files
-ls .io-tracer/results/*.json
+ls .nx/io-tracer/results/*.json
 
 # Check specific task (use grep for large files)
-grep -E '"undeclaredReads"|"undeclaredWrites"' .io-tracer/results/<project>__<target>.json -A 5
+grep -E '"undeclaredReads"|"undeclaredWrites"' .nx/io-tracer/results/<project>__<target>.json -A 5
 ```
 
 ### Check Summary
 
 ```bash
-cat .io-tracer/results/summary.json
+cat .nx/io-tracer/results/summary.json
 ```
 
 ## Understanding Results
@@ -169,7 +169,7 @@ npx nx graph --target=build --focus=<project>
 
 ```bash
 # Stop container
-cd .io-tracer && docker compose down
+cd .nx/io-tracer && docker compose down
 
 # Remove volumes (clears node_modules, nx cache)
 docker compose down -v
@@ -177,7 +177,7 @@ docker compose down -v
 
 ## Example Workflow
 
-1. **Start tracer**: `cd .io-tracer && docker compose up -d`
+1. **Start tracer**: `cd .nx/io-tracer && docker compose up -d`
 2. **Install deps**: `docker compose exec tracer pnpm install`
 3. **Run full trace**: `docker compose exec tracer node /tracer/run-all-traces.mjs`
 4. **Review results**: `cat results/RESULTS.md`
