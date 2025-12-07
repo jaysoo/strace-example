@@ -22,7 +22,7 @@ docker compose up -d
 docker compose exec tracer pnpm install
 
 # Trace a task
-./trace.sh myproject:build --skip-nx-cache
+./trace.sh myproject:build --skipNxCache
 ```
 
 ### Option 2: Run directly from this repo
@@ -31,21 +31,21 @@ docker compose exec tracer pnpm install
 # For external workspaces
 WORKSPACE_PATH=/path/to/nx-workspace docker compose up -d
 docker compose exec ebpf bash -c "pnpm install"
-docker compose exec ebpf node /tracer/tracer-nx.mjs project:target --skip-nx-cache
+docker compose exec ebpf node /tracer/tracer-nx.mjs project:target --skipNxCache
 
 # For the test projects in this repo
 docker compose up -d
-docker compose exec ebpf node tracer-nx.mjs data-processor:process-data --skip-nx-cache
+docker compose exec ebpf node tracer-nx.mjs data-processor:process-data --skipNxCache
 ```
 
 ### Option 3: Run natively (Linux only, or macOS with sudo)
 
 ```bash
 # macOS (requires sudo for fs_usage)
-sudo node tracer-nx.mjs project:target --skip-nx-cache
+sudo node tracer-nx.mjs project:target --skipNxCache
 
 # Linux
-node tracer-nx.mjs project:target --skip-nx-cache
+node tracer-nx.mjs project:target --skipNxCache
 ```
 
 ## Usage
@@ -55,12 +55,12 @@ node tracer-nx.mjs project:target --skip-nx-cache
 ./trace.sh <project>:<target> [options]
 
 # Examples
-./trace.sh myapp:build --skip-nx-cache
-./trace.sh mylib:test --skip-nx-cache
-./trace.sh nx:build --skip-nx-cache
+./trace.sh myapp:build --skipNxCache
+./trace.sh mylib:test --skipNxCache
+./trace.sh nx:build --skipNxCache
 ```
 
-> **Tip**: Always use `--skip-nx-cache` to ensure the task runs. Cached tasks have no I/O to trace.
+> **Tip**: Always use `--skipNxCache` to ensure the task runs. Cached tasks have no I/O to trace.
 
 ## How It Works
 
@@ -187,6 +187,6 @@ pnpm install
 ```
 
 ### Task runs but no I/O detected
-- Ensure you're using `--skip-nx-cache`
+- Ensure you're using `--skipNxCache`
 - Check that the task actually reads/writes files
 - Some tasks may be pure computation with no file I/O

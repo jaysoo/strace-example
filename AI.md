@@ -38,17 +38,17 @@ This script:
 ### Option 2: Trace Individual Tasks
 
 ```bash
-docker compose exec tracer node /tracer/tracer-nx.mjs <project>:<target> --skip-nx-cache
+docker compose exec tracer node /tracer/tracer-nx.mjs <project>:<target> --skipNxCache
 ```
 
-Always use `--skip-nx-cache` to ensure the task actually runs.
+Always use `--skipNxCache` to ensure the task actually runs.
 
 ### Option 3: Trace Isolated Tasks (No Dependencies)
 
 To trace a single task without running its dependencies, use `--excludeTaskDependencies`:
 
 ```bash
-docker compose exec tracer node /tracer/tracer-nx.mjs <project>:<target> --skip-nx-cache --excludeTaskDependencies
+docker compose exec tracer node /tracer/tracer-nx.mjs <project>:<target> --skipNxCache --excludeTaskDependencies
 ```
 
 This is useful when:
@@ -135,7 +135,7 @@ Add to target inputs:
 If tasks fail with JSON parse errors or "No JSON output", retry them individually:
 
 ```bash
-docker compose exec tracer node /tracer/tracer-nx.mjs <project>:<target> --skip-nx-cache 2>&1 | tail -50
+docker compose exec tracer node /tracer/tracer-nx.mjs <project>:<target> --skipNxCache 2>&1 | tail -50
 ```
 
 Failures are usually transient (output buffer issues).

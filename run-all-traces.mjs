@@ -74,7 +74,7 @@ function runTrace(project, target) {
     // Stream output to a temp file to handle large outputs
     const tempOutputFile = join(RESULTS_DIR, `_temp_${project}__${target}.txt`);
 
-    const result = spawnSync('node', [TRACER_SCRIPT, taskId, '--skip-nx-cache'], {
+    const result = spawnSync('node', [TRACER_SCRIPT, taskId, '--skipNxCache'], {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 300000, // 5 min timeout

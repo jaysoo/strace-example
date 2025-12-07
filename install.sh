@@ -44,7 +44,7 @@ cat > "$TRACER_DIR/docker-compose.yml" << 'EOF'
 #
 # Usage:
 #   docker compose up -d
-#   docker compose exec tracer node tracer-nx.mjs <project>:<target> --skip-nx-cache
+#   docker compose exec tracer node tracer-nx.mjs <project>:<target> --skipNxCache
 #   docker compose down
 #
 
@@ -102,14 +102,14 @@ cat > "$TRACER_DIR/trace.sh" << 'EOF'
 #
 # Trace an Nx task
 # Usage: ./trace.sh <project>:<target> [options]
-# Example: ./trace.sh myapp:build --skip-nx-cache
+# Example: ./trace.sh myapp:build --skipNxCache
 #
 
 set -e
 
 if [[ -z "$1" ]]; then
   echo "Usage: ./trace.sh <project>:<target> [options]"
-  echo "Example: ./trace.sh myapp:build --skip-nx-cache"
+  echo "Example: ./trace.sh myapp:build --skipNxCache"
   exit 1
 fi
 
@@ -151,17 +151,17 @@ docker compose up -d
 docker compose exec tracer pnpm install
 
 # 3. Trace a task
-./trace.sh <project>:<target> --skip-nx-cache
+./trace.sh <project>:<target> --skipNxCache
 ```
 
 ## Examples
 
 ```bash
-./trace.sh myapp:build --skip-nx-cache
-./trace.sh mylib:test --skip-nx-cache
+./trace.sh myapp:build --skipNxCache
+./trace.sh mylib:test --skipNxCache
 ```
 
-> Always use `--skip-nx-cache` to ensure the task runs. Cached tasks have no I/O to trace.
+> Always use `--skipNxCache` to ensure the task runs. Cached tasks have no I/O to trace.
 
 ## Managing the Container
 
@@ -201,10 +201,10 @@ echo "============================================================"
 echo ""
 echo "Run a trace:"
 echo "  cd $TRACER_DIR"
-echo "  ./trace.sh <project>:<target> --skip-nx-cache"
+echo "  ./trace.sh <project>:<target> --skipNxCache"
 echo ""
 echo "Or with isolated task (no dependencies):"
-echo "  ./trace.sh <project>:<target> --skip-nx-cache --excludeTaskDependencies"
+echo "  ./trace.sh <project>:<target> --skipNxCache --excludeTaskDependencies"
 echo ""
 echo "To stop:"
 echo "  cd $TRACER_DIR && docker compose down"
