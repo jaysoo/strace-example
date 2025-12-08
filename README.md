@@ -4,8 +4,6 @@ Traces file I/O during Nx task execution and compares against declared `inputs`/
 
 ## Installation
 
-### Option 1: Install into your Nx workspace (recommended)
-
 ```bash
 # Clone this repo
 git clone https://github.com/jaysoo/io-tracing.git
@@ -13,61 +11,71 @@ cd io-tracing
 
 # Install into your Nx workspace
 ./install.sh /path/to/your/nx-workspace
-
-# Navigate to the tracer directory
-cd /path/to/your/nx-workspace/.io-tracer
-
-# Start the container and install dependencies (first time only)
-docker compose up -d
-docker compose exec tracer pnpm install
-
-# Trace a task
-./trace.sh myproject:build --skipNxCache
 ```
 
-### Option 2: Run directly from this repo
-
-```bash
-# For external workspaces
-WORKSPACE_PATH=/path/to/nx-workspace docker compose up -d
-docker compose exec ebpf bash -c "pnpm install"
-docker compose exec ebpf node /tracer/tracer-nx.mjs project:target --skipNxCache
-
-# For the test projects in this repo
-docker compose up -d
-docker compose exec ebpf node tracer-nx.mjs data-processor:process-data --skipNxCache
-```
-
-### Option 3: Run natively (Linux only, or macOS with sudo)
-
-```bash
-# macOS (requires sudo for fs_usage)
-sudo node tracer-nx.mjs project:target --skipNxCache
-
-# Linux
-node tracer-nx.mjs project:target --skipNxCache
-```
+The installer will:
+- Create `.nx/io-tracer/` directory in your workspace
+- Build and start the Docker container
+- Install workspace dependencies
+- Reset Nx cache
 
 ## Usage
 
 ```bash
-# Basic usage
-./trace.sh <project>:<target> [options]
+cd /path/to/your/nx-workspace/.nx/io-tracer
+
+# Trace a single task
+./trace.sh <project>:<target> --skipNxCache
 
 # Examples
 ./trace.sh myapp:build --skipNxCache
 ./trace.sh mylib:test --skipNxCache
-./trace.sh nx:build --skipNxCache
+./trace.sh mylib:lint --skipNxCache
+
+# Trace all projects (build targets)
+docker compose exec tracer node /tracer/run-all-traces.mjs
+
+# Trace specific target across all projects
+docker compose exec tracer node /tracer/run-all-traces.mjs test
+docker compose exec tracer node /tracer/run-all-traces.mjs lint
 ```
 
 > **Tip**: Always use `--skipNxCache` to ensure the task runs. Cached tasks have no I/O to trace.
+
+## What It Detects
+
+### 1. Undeclared Inputs
+Files read during task execution but not in declared `inputs`:
+```
+Undeclared inputs (files read but not in any task inputs):
+  - packages/mylib/secret-config.txt
+```
+
+### 2. Undeclared Outputs
+Files written during task execution but not in declared `outputs`:
+```
+Undeclared outputs (files written but not in any task outputs):
+  - packages/mylib/src/generated.ts
+```
+
+### 3. Cross-Project Reads (Missing ^ Dependency Inputs)
+Files from OTHER projects that were read but aren't covered by `^` dependency inputs:
+```
+Cross-project reads (missing ^ dependency inputs):
+These files from OTHER projects were read but are not in inputs.
+Add "^{projectRoot}/**/*" or similar to include dependency files.
+  - packages/utils/src/index.ts (from packages/utils)
+```
+
+This is critical for tasks like `lint` where ESLint reads dependency source files for type-aware linting.
 
 ## How It Works
 
 1. **Fetches resolved inputs** using Nx's `HashPlanInspector` (same logic Nx uses for caching)
 2. **Traces all file I/O** during task execution (`strace` on Linux, `fs_usage` on macOS)
 3. **Compares actual I/O** against declared inputs/outputs
-4. **Reports mismatches** (✗ = undeclared, ✓ = declared)
+4. **Detects cross-project reads** that aren't covered by `^` dependency inputs
+5. **Reports mismatches** (✗ = undeclared, ✓ = declared)
 
 ## Example Output
 
@@ -77,44 +85,76 @@ Nx I/O Tracer - File Access Monitor
 ============================================================
 Platform: linux
 Workspace: /workspace
-Project: nx
-Target: build
+Project: app
+Target: lint
 
-[tracer] Fetching Nx project configurations...
 [tracer] Found 1 task(s) to trace:
-[tracer]   - nx:build (7 inputs, 4 outputs)
+[tracer]   - app:lint (2 inputs, 0 outputs) [✓ cacheable]
 [tracer] Getting resolved inputs via HashPlanInspector...
-[tracer] Found 1123 resolved file inputs
-
-[tracer] Process exited with code 0
+[tracer] Found 4 resolved file inputs
 
 ============================================================
 TRACING RESULTS
 ============================================================
 
-FILES READ (190 files in project scope):
-  ✓ packages/nx/src/index.ts
-  ✓ packages/nx/src/config/configuration.ts
-  ✗ Cargo.lock
-  ✗ Cargo.toml
-  ...
+FILES READ (1 files in project scope):
+  ✓ packages/app/src/index.ts
 
+============================================================
 ⚠️  UNDECLARED I/O DETECTED
 ============================================================
 
-Undeclared inputs (files read but not in any task inputs):
-  - Cargo.lock
-  - Cargo.toml
+Cross-project reads (missing ^ dependency inputs):
+These files from OTHER projects were read but are not in inputs.
+Add "^{projectRoot}/**/*" or similar to include dependency files.
+  - packages/utils/src/index.ts (from packages/utils)
+```
 
-Undeclared outputs (files written but not in any task outputs):
-  - packages/nx/src/native/index.d.ts
-  - packages/nx/src/native/native-bindings.js
-  - packages/nx/src/native/nx.linux-arm64-gnu.node
+## Fixing Issues
+
+### Missing ^ Dependency Inputs (for lint, typecheck, etc.)
+
+```json
+// In nx.json
+"namedInputs": {
+  "lintSources": ["{projectRoot}/**/*.ts"]
+},
+"targetDefaults": {
+  "lint": {
+    "inputs": ["lintSources", "^lintSources", "{workspaceRoot}/eslint.config.mjs"]
+  }
+}
+```
+
+### Undeclared Outputs (code generators, etc.)
+
+```json
+// In project.json
+"build": {
+  "outputs": [
+    "{projectRoot}/dist",
+    "{projectRoot}/src/generated-config.ts"
+  ]
+}
+```
+
+### Root-level Config Files
+
+```json
+// In nx.json
+"namedInputs": {
+  "sharedGlobals": [
+    "{workspaceRoot}/Cargo.*",
+    "{workspaceRoot}/gradle.properties"
+  ]
+}
 ```
 
 ## Managing the Container
 
 ```bash
+cd .nx/io-tracer
+
 # Start container
 docker compose up -d
 
@@ -124,34 +164,13 @@ docker compose down
 # Stop and remove volumes (clears node_modules, pnpm store, nx cache)
 docker compose down -v
 
-# View logs
-docker compose logs -f
-
 # Shell into container
 docker compose exec tracer bash
+
+# Re-install dependencies after package.json changes
+docker compose exec tracer npm install  # or pnpm/yarn
+docker compose exec tracer npx nx reset
 ```
-
-## Test Projects
-
-This repo includes two test libraries with intentional I/O mismatches:
-
-### data-fetcher (dependency)
-
-| File | Declared? | Type |
-|------|-----------|------|
-| `data/source.txt` | ✓ Yes | Input |
-| `secret-config.txt` | ✗ No | Input |
-| `dist/fetched.txt` | ✓ Yes | Output |
-| `dist/cache.txt` | ✗ No | Output |
-
-### data-processor (depends on data-fetcher)
-
-| File | Declared? | Type |
-|------|-----------|------|
-| `data/input.txt` | ✓ Yes | Input |
-| `undeclared-input.txt` | ✗ No | Input |
-| `dist/output.txt` | ✓ Yes | Output |
-| `dist/undeclared-output.txt` | ✗ No | Output |
 
 ## Files
 
@@ -159,13 +178,13 @@ This repo includes two test libraries with intentional I/O mismatches:
 |------|-------------|
 | `install.sh` | Install tracer into any Nx workspace |
 | `tracer-nx.mjs` | Main tracer script |
-| `Dockerfile` | Container with strace, Node.js, pnpm, Java, Rust |
-| `docker-compose.yml` | Container orchestration |
-| `libs/data-*/` | Test projects with intentional I/O mismatches |
+| `run-all-traces.mjs` | Batch trace all projects |
+| `Dockerfile` | Container with strace, Node.js 24, pnpm, Java 17/21, Rust |
+| `AI.md` | Instructions for AI assistants |
 
 ## Requirements
 
-- Docker (for cross-platform support)
+- Docker (recommended)
 - OR Linux with strace
 - OR macOS with sudo access (for fs_usage)
 
@@ -178,15 +197,18 @@ docker compose build --no-cache  # Rebuild
 docker compose up -d
 ```
 
-### "pnpm install" fails
-The container uses isolated node_modules. If your workspace has native modules:
+### Dependencies not installed
 ```bash
-docker compose exec tracer bash
-rm -rf node_modules
-pnpm install
+docker compose exec tracer npm install  # Detects package manager
+docker compose exec tracer npx nx reset
 ```
 
 ### Task runs but no I/O detected
 - Ensure you're using `--skipNxCache`
 - Check that the task actually reads/writes files
 - Some tasks may be pure computation with no file I/O
+
+### Docker out of disk space
+```bash
+docker system prune -a --volumes
+```

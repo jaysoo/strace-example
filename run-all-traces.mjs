@@ -1,7 +1,15 @@
 #!/usr/bin/env node
 /**
- * Run I/O tracer on all Nx projects with build targets
+ * Run I/O tracer on all Nx projects
  * Outputs results to results/ directory
+ *
+ * Usage:
+ *   node run-all-traces.mjs [target]
+ *
+ * Examples:
+ *   node run-all-traces.mjs           # Trace default targets (build, build-base, build-native)
+ *   node run-all-traces.mjs build     # Trace only 'build' targets
+ *   node run-all-traces.mjs test      # Trace only 'test' targets
  */
 
 import { execSync, spawnSync } from 'child_process';
@@ -29,8 +37,12 @@ const SKIP_PATTERNS = [
   /^tools-/,
 ];
 
-// Only trace these targets
-const TARGET_WHITELIST = ['build', 'build-base', 'build-native'];
+// Default targets to trace (when no argument provided)
+const DEFAULT_TARGETS = ['build', 'build-base', 'build-native'];
+
+// Get target from command line argument
+const targetArg = process.argv[2];
+const TARGET_WHITELIST = targetArg ? [targetArg] : DEFAULT_TARGETS;
 
 function shouldSkipProject(project) {
   return SKIP_PATTERNS.some(pattern => pattern.test(project));
@@ -201,6 +213,7 @@ function main() {
   // Create results directory
   mkdirSync(RESULTS_DIR, { recursive: true });
 
+  console.log(`Tracing target(s): ${TARGET_WHITELIST.join(', ')}`);
   console.log('Getting project list...');
   const projects = getProjects();
   console.log(`Found ${projects.length} projects to analyze`);

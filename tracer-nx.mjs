@@ -783,6 +783,37 @@ async function main() {
   // Get project root for filtering
   const projectRoot = taskConfigs[0]?.root || '';
 
+  // Get all project roots to detect cross-project reads (using project graph)
+  let allProjectRoots = new Set();
+  try {
+    const script = `
+const { createProjectGraphAsync } = require('@nx/devkit');
+async function main() {
+  const graph = await createProjectGraphAsync();
+  const roots = Object.values(graph.nodes).map(n => n.data.root).filter(Boolean);
+  console.log(JSON.stringify(roots));
+}
+main();
+`;
+    const output = execSync(`node -e "${script.replace(/"/g, '\\"').replace(/\n/g, ' ')}"`, {
+      cwd: CONFIG.workspaceRoot,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const roots = JSON.parse(output.trim());
+    allProjectRoots = new Set(roots);
+  } catch {}
+
+  // Helper to check if a file is in another project (not the current one)
+  const isInOtherProject = (filePath) => {
+    for (const root of allProjectRoots) {
+      if (root !== projectRoot && (filePath.startsWith(root + '/') || filePath === root)) {
+        return root;
+      }
+    }
+    return null;
+  };
+
   // Helper to check if a file is relevant to this project
   // (in project root, or in a shared location like libs/)
   const isRelevantToProject = (filePath) => {
@@ -819,6 +850,17 @@ async function main() {
   const undeclaredWrites = taskWrites.filter(
     f => !isDirectory(f) && isRelevantToProject(f) && !findMatchingOutputTask(f, taskConfigs)
   );
+
+  // Detect cross-project reads (files from other projects that aren't in resolved inputs)
+  // These indicate missing ^ dependency inputs
+  const crossProjectReads = taskReads.filter(f => {
+    if (isDirectory(f)) return false;
+    const otherProject = isInOtherProject(f);
+    if (!otherProject) return false;
+    // Check if this cross-project file is in resolved inputs (via ^ dependency)
+    if (isInResolvedInputs(f)) return false;
+    return true;
+  });
 
   // Print results
   console.log('');
@@ -863,7 +905,7 @@ async function main() {
   }
 
   // Print mismatches
-  if (undeclaredReads.length > 0 || undeclaredWrites.length > 0) {
+  if (undeclaredReads.length > 0 || undeclaredWrites.length > 0 || crossProjectReads.length > 0) {
     console.log('');
     console.log('='.repeat(60));
     console.log('⚠️  UNDECLARED I/O DETECTED');
@@ -873,6 +915,17 @@ async function main() {
       console.log('');
       console.log('Undeclared inputs (files read but not in any task inputs):');
       undeclaredReads.forEach(f => console.log(`  - ${f}`));
+    }
+
+    if (crossProjectReads.length > 0) {
+      console.log('');
+      console.log('Cross-project reads (missing ^ dependency inputs):');
+      console.log('These files from OTHER projects were read but are not in inputs.');
+      console.log('Add "^{projectRoot}/**/*" or similar to include dependency files.');
+      crossProjectReads.forEach(f => {
+        const otherProj = isInOtherProject(f);
+        console.log(`  - ${f} (from ${otherProj})`);
+      });
     }
 
     if (undeclaredWrites.length > 0) {
@@ -890,10 +943,11 @@ async function main() {
   console.log('JSON OUTPUT:');
   console.log(JSON.stringify({
     tasks: taskConfigs.map(c => `${c.project}:${target}`),
-    reads: taskReads,
-    writes: taskWrites,
+    // reads: taskReads,
+    // writes: taskWrites,
     undeclaredReads,
     undeclaredWrites,
+    crossProjectReads,
     exitCode: results.exitCode,
   }, null, 2));
 }
