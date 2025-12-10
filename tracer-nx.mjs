@@ -597,7 +597,16 @@ function parseStraceOutput(straceOutput) {
   const lines = straceOutput.split('\n');
 
   for (const line of lines) {
-    const openatMatch = line.match(/openat\(AT_FDCWD,\s*"([^"]+)",\s*([^)]+)\)\s*=\s*(\d+)/);
+    // Match completed syscalls: openat(AT_FDCWD, "/path", O_RDONLY|O_CLOEXEC) = 31
+    let openatMatch = line.match(/openat\(AT_FDCWD,\s*"([^"]+)",\s*([^)]+)\)\s*=\s*(\d+)/);
+
+    // Also match unfinished syscalls: openat(AT_FDCWD, "/path", O_RDONLY|O_CLOEXEC <unfinished ...>
+    // These occur in multi-threaded tracing when a syscall starts but another thread interrupts
+    // The syscall will eventually complete (shown in a "resumed" line), so we should capture it
+    if (!openatMatch) {
+      openatMatch = line.match(/openat\(AT_FDCWD,\s*"([^"]+)",\s*([^)<]+)\s*<unfinished/);
+    }
+
     if (openatMatch) {
       const [, filePath, flags] = openatMatch;
 
